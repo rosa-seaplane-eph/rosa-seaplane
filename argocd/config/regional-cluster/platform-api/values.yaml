@@ -51,22 +51,6 @@ platformApi:
     secretName: seaplane-db-dsn
     secretKey: dsn
 
-  # Envoy sidecar configuration
-  envoy:
-    image:
-      # Envoy is unnecessary and slated for removal in ROSAENG-66828.
-      repository: docker.io/envoyproxy/envoy
-      tag: v1.31-latest
-
-    # Resources for the Envoy sidecar
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 200m
-        memory: 256Mi
-
   # Deployment configuration
   deployment:
     replicas: 2
@@ -75,7 +59,6 @@ platformApi:
   service:
     type: ClusterIP
     ports:
-      http: 8080
       api: 8000
       health: 8081
       metrics: 9090

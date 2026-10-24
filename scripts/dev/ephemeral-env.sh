@@ -732,7 +732,7 @@ cmd_shell() {
             echo "Region:      $AWS_DEFAULT_REGION"
             echo ""
             echo "Example commands:"
-            echo "  awscurl --service execute-api $API_URL/v0/live"
+            echo "  awscurl --service execute-api $API_URL/api/v0/live"
             exec bash'
 }
 

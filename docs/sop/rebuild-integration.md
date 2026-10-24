@@ -122,7 +122,7 @@ The RHOBS API Gateway uses a raw `execute-api` URL that changes on every rebuild
    ```bash
    make int-shell
    # In shell:
-   awscurl --service execute-api $API_URL/v0/live
+   awscurl --service execute-api $API_URL/api/v0/live
    ```
 
    Expected response: `{"status":"ok"}`

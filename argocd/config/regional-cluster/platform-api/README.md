@@ -1,14 +1,13 @@
 # platform-api Helm Chart
 
-Helm chart for the ROSA Seaplane API with Envoy sidecar proxy.
+Helm chart for the ROSA Seaplane API.
 
 ## Overview
 
 This chart deploys:
 
 - Platform API application with authorization middleware
-- Envoy sidecar for unified traffic routing
-- Service exposing ports 8080 (Envoy), 8000 (API), 8081 (health), 9090 (metrics)
+- Service exposing ports 8000 (API), 8081 (health), and 9090 (metrics)
 - TargetGroupBinding for AWS Application Load Balancer integration
 
 ## Prerequisites
@@ -32,9 +31,6 @@ platformApi:
       tag: nodb
     args:
       allowedAccounts: "123456789012" # Comma-separated AWS account IDs
-
-  envoy:
-    enabled: true
 
   targetGroup:
     arn: "PLACEHOLDER" # AWS Target Group ARN
@@ -127,14 +123,6 @@ kubectl delete namespace platform-api
 | `platformApi.app.args.logLevel`        | Log level (debug, info, warn, error) | `info`                             |
 | `platformApi.deployment.replicas`      | Number of replicas                   | `1`                                |
 
-### Envoy Configuration
-
-| Parameter                            | Description            | Default            |
-| ------------------------------------ | ---------------------- | ------------------ |
-| `platformApi.envoy.enabled`          | Enable Envoy sidecar   | `true`             |
-| `platformApi.envoy.image.repository` | Envoy image repository | `envoyproxy/envoy` |
-| `platformApi.envoy.image.tag`        | Envoy image tag        | `v1.31-latest`     |
-
 ### Target Group Configuration
 
 | Parameter                            | Description                  | Default         |
@@ -148,15 +136,10 @@ kubectl delete namespace platform-api
 ┌─────────────────────────────────────────┐
 │   Application Load Balancer (ALB)      │
 └────────────────┬────────────────────────┘
-                 │ :8080
+                 │ :8000
                  │
 ┌────────────────▼────────────────────────┐
-│           Envoy Sidecar :8080           │
-│  Routes based on path:                  │
-│  • /api/* → app:8000                    │
-│  • /v0/live → app:8081 (/healthz)       │
-│  • /v0/ready → app:8081 (/readyz)       │
-│  • /metrics → app:9090                  │
+│           Platform API :8000            │
 └────────────────┬────────────────────────┘
                  │
      ┌───────────┼───────────┐
@@ -173,14 +156,14 @@ The application exposes health endpoints on port 8081:
 - `/healthz` - Liveness probe
 - `/readyz` - Readiness probe
 
-Kubernetes probes check these endpoints directly (not through Envoy).
+Kubernetes probes check these endpoints directly.
 
 ## API Endpoints
 
 All API endpoints require the `X-Amz-Account-Id` header with an allowed AWS account ID:
 
 ```bash
-curl -s http://localhost:8080/api/v0/management_clusters \
+curl -s http://localhost:8000/api/v0/management_clusters \
   -H "X-Amz-Account-Id: 123456789012"
 ```
 
@@ -199,8 +182,6 @@ kubectl describe pod -n platform-api <pod-name>
 # Application logs
 kubectl logs -n platform-api <pod-name> -c platform-api
 
-# Envoy logs
-kubectl logs -n platform-api <pod-name> -c envoy
 ```
 
 ### Check TargetGroupBinding
@@ -214,9 +195,7 @@ kubectl describe targetgroupbinding -n platform-api platform-api
 
 ```bash
 # Port-forward to test locally
-kubectl port-forward -n platform-api svc/platform-api 8080:8080
+kubectl port-forward -n platform-api svc/platform-api 8000:8000
 
-# Test via Envoy
-curl http://localhost:8080/v0/live
-curl http://localhost:8080/v0/ready
+curl http://localhost:8000/api/v0/live
 ```

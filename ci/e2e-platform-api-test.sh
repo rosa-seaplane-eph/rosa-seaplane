@@ -55,8 +55,8 @@ test_platform_api() {
   set +e # allow awscurl to fail without exiting (disable errexit)
   counter=0
   while true; do
-    log_msg "Testing API URL: $API_URL/prod/v0/live"
-    awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/v0/live"
+    log_msg "Testing API URL: $API_URL/prod/api/v0/live"
+    awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/api/v0/live"
     r=$?
     if [ "$r" -eq 0 ]; then
       log_success "API is healthy"
@@ -73,7 +73,7 @@ test_platform_api() {
   done
   set -e # re-enable exit on error (errexit)
 
-  awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/v0/ready"
+  awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/api/v0/ready"
   awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/api/v0/management_clusters"
   awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/prod/api/v0/resource_bundles"
   # awscurl --fail-with-body --service execute-api --region "$REGION" "$API_URL/api/v0/work"

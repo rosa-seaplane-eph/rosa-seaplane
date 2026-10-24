@@ -82,7 +82,7 @@ output "test_command" {
   description = "awscurl command to test the API"
   value       = <<-EOT
     awscurl --service execute-api --region ${data.aws_region.current.id} \
-      ${aws_api_gateway_stage.main.invoke_url}/v0/live
+      ${aws_api_gateway_stage.main.invoke_url}/api/v0/live
   EOT
 }
 

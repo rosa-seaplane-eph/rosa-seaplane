@@ -185,9 +185,9 @@ API Gateway: https://thfvcunmr3.execute-api.us-east-1.amazonaws.com/prod
 Region:      us-east-1
 
 Example commands:
-  awscurl --service execute-api https://thfvcunmr3.execute-api.us-east-1.amazonaws.com/prod/v0/live
+  awscurl --service execute-api https://thfvcunmr3.execute-api.us-east-1.amazonaws.com/prod/api/v0/live
 
-[root@df2f729c21c2 /]# awscurl --service execute-api https://thfvcunmr3.execute-api.us-east-1.amazonaws.com/prod/v0/live
+[root@df2f729c21c2 /]# awscurl --service execute-api https://thfvcunmr3.execute-api.us-east-1.amazonaws.com/prod/api/v0/live
 {"status":"ok"}
 ```
 

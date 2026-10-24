@@ -26,7 +26,7 @@ Target Group (IP type, empty)
     │
     ▼ (populated by TargetGroupBinding)
     │
-Backend Pods (:8080)
+Backend Pods (:8000)
 ```
 
 ## Connecting the Backend
@@ -43,7 +43,7 @@ metadata:
 spec:
   serviceRef:
     name: platform-api
-    port: 8080
+    port: 8000
   targetGroupARN: <target_group_arn from terraform output>
   targetType: ip
 ```
@@ -58,5 +58,5 @@ terraform output -raw invoke_url
 
 # Test the API
 awscurl --service execute-api --region us-west-2 \
-  https://abc123.execute-api.us-west-2.amazonaws.com/prod/v0/live
+  https://abc123.execute-api.us-west-2.amazonaws.com/prod/api/v0/live
 ```
