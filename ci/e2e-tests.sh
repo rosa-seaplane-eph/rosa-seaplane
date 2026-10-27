@@ -355,7 +355,13 @@ if [[ "$_have_customer_creds" == "true" ]]; then
     export ROSA_REPO_URL ROSA_REPO_BRANCH TEST_PROFILE="${ROSA_TEST_PROFILE}"
     export GOTOOLCHAIN=auto
     echo "ROSA_LABEL_FILTER: ${ROSA_LABEL_FILTER}"
-    ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
+    # Register the customer account as the RC account. "privileged" is for the legacy
+    # accounts API; the Cedar allowlist ignores it.
+    AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" \
+      -X POST -H "Content-Type: application/json" \
+      -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
+      "${BASE_URL}/api/v0/accounts" > /dev/null || true
+    AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
   else
     echo ""
     echo "=== ROSA CLI Tests ==="
