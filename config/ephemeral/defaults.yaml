@@ -17,8 +17,10 @@
 deployment_name: "{{ aws_region }}{% if eph_prefix %}-{{ eph_prefix }}{% endif %}"
 
 aws:
+  # Prow ephemeral Vault rrp-central assumes central role ci (user ci cannot assume OrgAccess).
   zoa_access_trusted_assumer_role_names:
     - OrganizationAccountAccessRole
+    - ci
   zoa_access_trusted_assumer_role_name_suffixes:
     - rosa-seaplane-zoa-operator-dev # future: rosa-seaplane-zoa-operator-eph
 

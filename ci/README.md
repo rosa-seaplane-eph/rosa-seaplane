@@ -167,7 +167,7 @@ Vault **path** (where you edit) and **Prow secret name** (what ci-operator mount
 | `rosa-regional-platform-integration-creds` | `integration-creds`                      | `nightly-integration`                | `aws_config`, `api_url`, `rhobs_api_url`, `zoa_rc_api_url`, `zoa_mc_api_url`                                         |
 | `rosa-seaplane-stage-creds`                | `stage-creds`                            | `nightly-stage`                      | same keys as integration                                                                                             |
 
-Each `aws_config` field contains a complete AWS CLI config file with only the profiles that job type requires. URL fields (`api_url`, `rhobs_api_url`, `zoa_rc_api_url`, `zoa_mc_api_url`) are configured for integration and stage; update them after a redeploy (same process as `rhobs_api_url` in [`docs/sop/rebuild-integration.md`](../docs/sop/rebuild-integration.md)).
+Each `aws_config` field contains a complete AWS CLI config file with only the profiles that job type requires. Ephemeral `rrp-central` assumes the central IAM role `ci` (not `OrganizationAccountAccessRole`); ZOA Access e2e trusts that role via `aws.zoa_access_trusted_assumer_role_names` in `config/ephemeral/defaults.yaml`. URL fields (`api_url`, `rhobs_api_url`, `zoa_rc_api_url`, `zoa_mc_api_url`) are configured for integration and stage; update them after a redeploy (same process as `rhobs_api_url` in [`docs/sop/rebuild-integration.md`](../docs/sop/rebuild-integration.md)).
 
 ## AWS Account Cleanup (Janitor)
 

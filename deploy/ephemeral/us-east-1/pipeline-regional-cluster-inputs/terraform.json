@@ -45,7 +45,7 @@
   "zoa_lambda_api_concurrency": -1,
   "zoa_lambda_worker_concurrency": -1,
   "zoa_lambda_access_concurrency": -1,
-  "zoa_access_trusted_assumer_role_names": ["OrganizationAccountAccessRole"],
+  "zoa_access_trusted_assumer_role_names": ["OrganizationAccountAccessRole", "ci"],
   "zoa_access_trusted_assumer_role_name_suffixes": ["rosa-seaplane-zoa-operator-dev"],
   "worker_node_ami_id": "ami-056d5e72aa5cf51f1",
   "worker_node_root_volume_size": 50,

@@ -45,6 +45,7 @@ aws:
   # @used-by aws.zoa_access_trusted_assumer_role_names _context
   zoa_access_trusted_assumer_role_names:
   - OrganizationAccountAccessRole
+  - ci
   # @doc aws.zoa_access_trusted_assumer_role_name_suffixes Suffix only (app-interface access role name field), not the full IAM role name. App-interface SAML roles in central are created as "<central_account_id>-<suffix>" so the account ID must not be hardcoded in git; RC Terraform prefixes each suffix with the central account ID from the aws.central provider at apply time. Optional in defaults; at least one name or suffix required per environment at apply. Only list suffixes for roles that exist in that environment's central account.
   # @used-by aws.zoa_access_trusted_assumer_role_name_suffixes _context
   zoa_access_trusted_assumer_role_name_suffixes:
