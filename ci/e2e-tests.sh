@@ -361,10 +361,20 @@ if [[ "$_have_customer_creds" == "true" ]]; then
     export ROSA_REPO_URL ROSA_REPO_BRANCH TEST_PROFILE="${ROSA_TEST_PROFILE}"
     export GOTOOLCHAIN=auto
     echo "ROSA_LABEL_FILTER: ${ROSA_LABEL_FILTER}"
+    # Debug: show which AWS identities the steps below will use, so CI logs
+    # make it obvious whether the tests run against the customer account.
+    echo "[debug] AWS_PROFILE for ROSA CLI tests: ${CUSTOMER_AWS_PROFILE}"
+    _reg_identity="$(aws sts get-caller-identity --profile rrp-rc \
+      --query 'Arn' --output text 2>/dev/null || echo unavailable)"
+    echo "[debug] Account registration signer (rrp-rc): ${_reg_identity}"
+    _cli_identity="$(aws sts get-caller-identity --profile "${CUSTOMER_AWS_PROFILE}" \
+      --query 'Arn' --output text 2>/dev/null || echo unavailable)"
+    echo "[debug] ROSA CLI tests caller identity (${CUSTOMER_AWS_PROFILE}): ${_cli_identity}"
     # Register the customer account as the RC account. "privileged" is for the legacy
     # accounts API; the Cedar allowlist ignores it.
     if AWS_PROFILE=rrp-rc awscurl --service execute-api --region "${AWS_DEFAULT_REGION}" --fail-with-body \
       -X POST -H "Content-Type: application/json" \
+      -w '%{http_code}' -o /dev/null \
       -d "{\"accountId\":\"${E2E_CUSTOMER_ACCOUNT_ID}\",\"privileged\":true}" \
       "${BASE_URL}/api/v0/accounts"; then
       AWS_PROFILE="${CUSTOMER_AWS_PROFILE}" ROSA_LABEL_FILTER="${ROSA_LABEL_FILTER}" make test-e2e-rosa-cli || rosa_cli_rc=$?
