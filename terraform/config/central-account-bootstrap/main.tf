@@ -2,6 +2,23 @@ provider "aws" {
   region = var.region
 }
 
+# Existing states hold the retired public platform-image ECR repository, created
+# through this alias (ECR Public is us-east-1 only). Terraform needs the alias to
+# destroy it; remove once every environment has applied without that resource.
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# Existing states hold the retired build-platform-image resources, created
+# through the module's own provider configuration. The provider-only module
+# lets Terraform destroy them; remove it with the alias above.
+module "platform_image_builder" {
+  source = "../../modules/platform-image-builder"
+
+  region = var.region
+}
+
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 data "aws_partition" "current" {}

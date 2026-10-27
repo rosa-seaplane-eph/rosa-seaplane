@@ -1,3 +1,10 @@
+# States from before the CodePipeline rework hold the provisioner under its old
+# address; map it to the provider-only module so its resources can be destroyed.
+moved {
+  from = module.pipeline_provisioner
+  to   = module.platform_image_builder
+}
+
 moved {
   from = module.pipeline_notifications
   to   = module.codebuild_notifications
