@@ -8,6 +8,16 @@ output "cluster_name" {
   value       = module.regional_cluster.cluster_name
 }
 
+output "rc_provisioned_sha" {
+  description = "Git commit applied by the RC pipeline for operational traceability."
+  value       = var.provisioned_sha
+}
+
+output "rc_provisioned_fingerprint" {
+  description = "RC pipeline input fingerprint used to correlate RC state with dependent MC builds."
+  value       = var.rc_provisioned_fingerprint
+}
+
 output "cluster_arn" {
   description = "EKS cluster ARN"
   value       = module.regional_cluster.cluster_arn

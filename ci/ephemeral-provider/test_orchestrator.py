@@ -22,6 +22,112 @@ def make_env():
     return env
 
 
+@pytest.mark.parametrize(
+    "scenario",
+    ["fresh_create", "push_match", "changed_filter", "retained_success", "rc_skipped_mc_started"],
+)
+def test_start_provision_pipelines_decision_paths(scenario):
+    env = make_env()
+    rc_pipeline = f"{env.rc_project}-pipeline"
+    env.mc_projects = ["eph-test-mc01"] if scenario == "rc_skipped_mc_started" else []
+    mc_pipeline = f"{env.mc_projects[0]}-pipeline" if env.mc_projects else None
+    target = env.target_monitor
+    target.push_trigger_matches.side_effect = lambda config, *_: bool(config and config["match"])
+    target.wait_for_creation_execution.return_value = "created-execution"
+    target.wait_for_revision_execution.return_value = "push-execution"
+    target.start_or_reuse_pipeline.side_effect = lambda pipeline, *_args, **kwargs: (
+        None if kwargs.get("start_if_idle") is False and pipeline == rc_pipeline else "started-execution"
+    )
+    target.has_successful_execution.return_value = ("previous-success", "b" * 40)
+
+    created = set()
+    old_configs = {rc_pipeline: {"match": False}}
+    desired_configs = old_configs
+    skip_untriggered = False
+    if scenario == "fresh_create":
+        created = {rc_pipeline}
+        old_configs = None
+        desired_configs = None
+    elif scenario == "push_match":
+        old_configs = {rc_pipeline: {"match": True}}
+        desired_configs = old_configs
+    elif scenario == "changed_filter":
+        desired_configs = {rc_pipeline: {"match": True}}
+    elif scenario == "retained_success":
+        skip_untriggered = True
+        target.start_or_reuse_pipeline.return_value = None
+    else:
+        old_configs[mc_pipeline] = {"match": False}
+        desired_configs = {
+            rc_pipeline: {"match": False},
+            mc_pipeline: {"match": True},
+        }
+
+    builds = env._start_provision_pipelines(
+        "a" * 40,
+        created_pipeline_names=created,
+        push_trigger_configs=old_configs,
+        branch="feature",
+        changed_paths=["terraform/config/regional-cluster/main.tf"],
+        skip_untriggered_pushes=skip_untriggered,
+        desired_push_trigger_configs=desired_configs,
+    )
+
+    expected = {
+        "fresh_create": [(env.rc_project, "created-execution")],
+        "push_match": [(env.rc_project, "push-execution")],
+        "changed_filter": [(env.rc_project, "started-execution")],
+        "retained_success": [],
+        "rc_skipped_mc_started": [("eph-test-mc01", "started-execution")],
+    }
+    assert builds == expected[scenario]
+    if scenario == "retained_success":
+        target.has_successful_execution.assert_called_once_with(rc_pipeline)
+    if scenario == "rc_skipped_mc_started":
+        target.has_successful_execution.assert_called_once_with(rc_pipeline)
+        target.start_or_reuse_pipeline.assert_any_call(rc_pipeline, "a" * 40, start_if_idle=False)
+        target.start_or_reuse_pipeline.assert_any_call(mc_pipeline, "a" * 40)
+
+
+def test_resume_resync_reapplies_provision_overrides_before_render(tmp_path):
+    env = make_env()
+    git = Mock(work_dir=tmp_path, eph_branch="eph-test-feature", eph_prefix="eph-test")
+    git.render_and_push.return_value = "a" * 40
+    git.pushed_file_paths = ["config/ephemeral/defaults.yaml"]
+    env.aws = SimpleNamespace(session=Mock(), target_session=Mock(), subprocess_env={})
+    env._setup_aws = Mock()
+    env._read_project_names = Mock()
+    env._inject_ephemeral_config = Mock()
+    env._apply_provision_overrides = Mock()
+    env._bootstrap_provisioner = Mock()
+    env._wait_for_provision = Mock()
+    env.target_monitor.active_pipelines.return_value = []
+    env.target_monitor.missing_pipelines.return_value = []
+    env.target_monitor.push_trigger_configs.return_value = {}
+
+    events = Mock()
+    events.attach_mock(git.resync_eph_branch, "resync")
+    events.attach_mock(env._inject_ephemeral_config, "inject")
+    events.attach_mock(env._apply_provision_overrides, "overrides")
+    events.attach_mock(git.render_and_push, "push")
+
+    with patch("orchestrator.GitManager", return_value=git), \
+            patch("orchestrator.discover_region", return_value="us-east-1"), \
+            patch("orchestrator.BuildMonitor"), \
+            patch("orchestrator.PipelineMonitor", return_value=env.target_monitor):
+        env._resume_impl(resync_before_resume=True)
+
+    assert [call[0] for call in events.mock_calls] == ["resync", "inject", "overrides", "push"]
+    env._apply_provision_overrides.assert_called_once_with(git)
+
+
+def test_mc_output_save_rejects_multiple_management_clusters():
+    env = make_env()
+    env.aws = Mock()
+    with pytest.raises(RuntimeError, match="supports exactly one MC"):
+        env._save_mc_terraform_outputs(Mock(), "/tmp/mc-outputs.json")
+
+
 @pytest.mark.parametrize("fire_and_forget", [False, True])
 @pytest.mark.parametrize("mc_count", [0, 2])
 def test_teardown_starts_all_clusters_before_waiting(fire_and_forget, mc_count):

@@ -114,7 +114,7 @@ ensure_platform_image() {
         --no-cli-pager 2>&1); then
         echo "ERROR: Failed to start build for $project_name" >&2
         echo "$build_id" >&2
-        exit 1
+        return 1
     fi
 
     echo "Build started: $build_id"
@@ -145,7 +145,7 @@ ensure_platform_image() {
             FAILED|TIMED_OUT|FAULT|STOPPED)
                 echo "ERROR: Build failed with status: $status" >&2
                 echo "Check CloudWatch logs for build: $build_id" >&2
-                exit 1
+                return 1
                 ;;
             IN_PROGRESS|QUEUED)
                 echo "  [$waited/${max_wait}s] Build status: $status"
@@ -162,14 +162,14 @@ ensure_platform_image() {
 
     if [ $waited -ge $max_wait ]; then
         echo "ERROR: Build did not complete within ${max_wait}s" >&2
-        exit 1
+        return 1
     fi
 
     # Re-verify image now exists
     echo "Re-verifying platform image after build..."
     if ! verify_platform_image_exists "$image_uri"; then
         echo "ERROR: Platform image still missing after successful build!" >&2
-        exit 1
+        return 1
     fi
 
     echo "✓ Platform image built and verified: $image_uri"
@@ -198,6 +198,86 @@ init_central_state() {
     if [ -z "$TF_STATE_BUCKET" ]; then
         TF_STATE_BUCKET="terraform-state-${CENTRAL_ACCOUNT_ID}"
     fi
+}
+
+resolve_environment_hosted_zone() {
+    local region_deployment="$1"
+    local config_file="deploy/${ENVIRONMENT}/${region_deployment}/pipeline-provisioner-inputs/terraform.json"
+    local zone_name hosted_zones attempt wait_time
+
+    ENVIRONMENT_DOMAIN=""
+    ENVIRONMENT_HOSTED_ZONE_ID=""
+    [[ -f "$config_file" ]] || return 0
+
+    ENVIRONMENT_DOMAIN=$(jq -r '.domain // empty' "$config_file") || return 1
+    [[ -n "$ENVIRONMENT_DOMAIN" ]] || return 0
+    CREATE_ENVIRONMENT_ZONE=$(jq -r '.create_environment_zone // false' "$config_file") || return 1
+
+    if [[ "$CREATE_ENVIRONMENT_ZONE" == "true" ]]; then
+        init_central_state || return 1
+        TF_STATE_REGION=$(jq -r '.tf_state_region // empty' "$config_file") || return 1
+        if [[ -z "$TF_STATE_REGION" ]]; then
+            local bucket_region
+            bucket_region=$(aws s3api get-bucket-location --bucket "$TF_STATE_BUCKET" \
+                --region us-east-1 --query LocationConstraint --output text --no-cli-pager) || return 1
+            if [[ "$bucket_region" == "None" || "$bucket_region" == "null" || -z "$bucket_region" ]]; then
+                TF_STATE_REGION="us-east-1"
+            else
+                TF_STATE_REGION="$bucket_region"
+            fi
+        fi
+
+        echo "Provisioning DNS environment zone: $ENVIRONMENT_DOMAIN"
+        terraform -chdir=terraform/config/dns-environment-zone init \
+            -reconfigure \
+            -backend-config="bucket=$TF_STATE_BUCKET" \
+            -backend-config="key=dns/environment-zone-${ENVIRONMENT}.tfstate" \
+            -backend-config="region=$TF_STATE_REGION" \
+            -backend-config="use_lockfile=true" || return 1
+
+        attempt=1
+        wait_time=30
+        while (( attempt <= 3 )); do
+            if terraform -chdir=terraform/config/dns-environment-zone apply -auto-approve \
+                -var="environment_domain=${ENVIRONMENT_DOMAIN}" \
+                -var="environment=${ENVIRONMENT}"; then
+                if ! ENVIRONMENT_HOSTED_ZONE_ID=$(terraform -chdir=terraform/config/dns-environment-zone output -raw zone_id); then
+                    echo "ERROR: Failed to read zone_id after creating $ENVIRONMENT_DOMAIN" >&2
+                    return 1
+                fi
+                [[ -n "$ENVIRONMENT_HOSTED_ZONE_ID" ]] || {
+                    echo "ERROR: Terraform returned an empty zone_id for $ENVIRONMENT_DOMAIN" >&2
+                    return 1
+                }
+                break
+            fi
+            if (( attempt == 3 )); then
+                echo "ERROR: Failed to create environment zone: $ENVIRONMENT_DOMAIN" >&2
+                return 1
+            fi
+            echo "DNS zone apply attempt $attempt failed, retrying in ${wait_time}s..."
+            sleep "$wait_time"
+            wait_time=$((wait_time * 2))
+            attempt=$((attempt + 1))
+        done
+    else
+        zone_name="${ENVIRONMENT_DOMAIN%.}."
+        if ! hosted_zones=$(aws route53 list-hosted-zones-by-name \
+            --dns-name "$zone_name" --output json --no-cli-pager); then
+            echo "ERROR: Failed to look up Route 53 zone $zone_name" >&2
+            return 1
+        fi
+        ENVIRONMENT_HOSTED_ZONE_ID=$(jq -r --arg name "$zone_name" \
+            '[.HostedZones[]? | select(.Name == $name and .Config.PrivateZone == false) | .Id][0] // empty' \
+            <<< "$hosted_zones") || return 1
+        if [[ -z "$ENVIRONMENT_HOSTED_ZONE_ID" ]]; then
+            echo "ERROR: No public Route 53 hosted zone found for $zone_name" >&2
+            return 1
+        fi
+        ENVIRONMENT_HOSTED_ZONE_ID="${ENVIRONMENT_HOSTED_ZONE_ID##*/}"
+    fi
+
+    export ENVIRONMENT_DOMAIN ENVIRONMENT_HOSTED_ZONE_ID TF_STATE_REGION
 }
 
 # Save central credentials for account switching
@@ -305,7 +385,7 @@ generate_project_spec() {
         ]')
 
     # Add cluster-type-specific env vars
-    if [ "$cluster_type" = "regional" ]; then
+    if [ "$cluster_type" = "regional" ] && [ -n "${ENVIRONMENT_HOSTED_ZONE_ID:-}" ]; then
         env_vars=$(echo "$env_vars" | jq \
             --arg regional_id "${REGIONAL_ID:-}" \
             --arg zone_id "${ENVIRONMENT_HOSTED_ZONE_ID:-}" \
@@ -313,6 +393,10 @@ generate_project_spec() {
                 {name: "REGIONAL_ID", value: $regional_id, type: "PLAINTEXT"},
                 {name: "ENVIRONMENT_HOSTED_ZONE_ID", value: $zone_id, type: "PLAINTEXT"}
             ]')
+    elif [ "$cluster_type" = "regional" ]; then
+        env_vars=$(echo "$env_vars" | jq \
+            --arg regional_id "${REGIONAL_ID:-}" \
+            '. + [{name: "REGIONAL_ID", value: $regional_id, type: "PLAINTEXT"}]')
     elif [ "$cluster_type" = "management" ]; then
         env_vars=$(echo "$env_vars" | jq \
             --arg management_id "${MANAGEMENT_ID:-}" \
@@ -374,9 +458,13 @@ generate_pipeline_file_paths() {
             '[
                 ("deploy/" + $env + "/" + $region + "/pipeline-regional-cluster-inputs/**"),
                 ("deploy/" + $env + "/" + $region + "/argocd-{values-regional-cluster.yaml,bootstrap-regional-cluster/**}"),
+                "config/**",
+                "scripts/render.py",
+                "scripts/pipeline-common/**",
+                "scripts/buildspec/{bootstrap-argocd-rc.sh,build-zoa-lambda.sh,provision-cluster.sh,provision-infra-rc.sh,register.sh,wait-for-regional-api.sh}",
+                "terraform/config/codebuild-regional-cluster/**",
                 "terraform/config/regional-cluster/**",
-                "terraform/modules/{zoa,zoa-lambda,zoa-access}/**",
-                "scripts/buildspec/build-zoa-lambda.sh"
+                "terraform/modules/**"
             ]'
     elif [ "$cluster_type" = "management" ]; then
         jq -n \
@@ -386,8 +474,13 @@ generate_pipeline_file_paths() {
             '[
                 ("deploy/" + $env + "/" + $region + "/pipeline-management-cluster-" + $mc_id + "-inputs/**"),
                 ("deploy/" + $env + "/" + $region + "/argocd-{values-management-cluster.yaml,bootstrap-management-cluster/**}"),
+                "config/**",
+                "scripts/render.py",
+                "scripts/pipeline-common/**",
+                "scripts/buildspec/{bootstrap-argocd-mc.sh,provision-cluster.sh,provision-infra-mc.sh,provision-kube-applier-dynamodb.sh,provision-mc-zoa-target-ssm.sh,register.sh,wait-for-regional-api.sh}",
+                "terraform/config/codebuild-management-cluster/**",
                 "terraform/config/{management-cluster,kube-applier-dynamodb-provisioning,mc-zoa-target-ssm-provisioning}/**",
-                "scripts/buildspec/provision-mc-zoa-target-ssm.sh"
+                "terraform/modules/**"
             ]'
     fi
 }
@@ -497,7 +590,7 @@ upsert_pipeline() {
     spec=$(generate_pipeline_spec "$cluster_type" "$pipeline_name" "$project_name" "$cluster_id" "$region_deployment") || return 1
 
     if aws_cluster_pipeline codepipeline get-pipeline --name "$pipeline_name" --query 'pipeline.name' --output text --no-cli-pager 2>/dev/null | grep -qx "$pipeline_name"; then
-        local current_spec current_normalized desired_normalized active_count
+        local current_spec current_normalized desired_normalized active_count executions next_token active_page_count
         current_spec=$(aws_cluster_pipeline codepipeline get-pipeline --name "$pipeline_name" --query 'pipeline' --output json --no-cli-pager)
         current_normalized=$(normalize_pipeline_spec <<< "$current_spec") || return 1
         desired_normalized=$(jq '.pipeline' <<< "$spec" | normalize_pipeline_spec) || return 1
@@ -507,14 +600,23 @@ upsert_pipeline() {
             return 0
         fi
 
-        if ! active_count=$(aws_cluster_pipeline codepipeline list-pipeline-executions \
-            --pipeline-name "$pipeline_name" \
-            --max-results 100 \
-            --output json \
-            --no-cli-pager | jq -e '[.pipelineExecutionSummaries[]? | select(.status == "InProgress" or .status == "Stopping" or .status == "Queued")] | length'); then
-            echo "ERROR: Failed to list executions for $pipeline_name; cannot safely update" >&2
-            return 1
-        fi
+        active_count=0
+        next_token=""
+        while :; do
+            local -a list_args=(codepipeline list-pipeline-executions --pipeline-name "$pipeline_name" --max-results 100 --output json --no-cli-pager)
+            [[ -z "$next_token" ]] || list_args+=(--next-token "$next_token")
+            if ! executions=$(aws_cluster_pipeline "${list_args[@]}"); then
+                echo "ERROR: Failed to list executions for $pipeline_name; cannot safely update" >&2
+                return 1
+            fi
+            if ! active_page_count=$(jq -e '[.pipelineExecutionSummaries[]? | select(.status == "InProgress" or .status == "Stopping" or .status == "Queued")] | length' <<< "$executions"); then
+                echo "ERROR: Invalid execution list response for $pipeline_name; cannot safely update" >&2
+                return 1
+            fi
+            active_count=$((active_count + active_page_count))
+            next_token=$(jq -r '.nextToken // empty' <<< "$executions") || return 1
+            [[ -n "$next_token" ]] || break
+        done
         if (( active_count > 0 )); then
             local current_core desired_core
             current_core=$(jq 'del(.triggers)' <<< "$current_normalized") || return 1
@@ -867,6 +969,7 @@ run_cluster_action() {
     case "$action" in
         create-rc|CreateRC)
             [ -n "$region_deployment" ] || { echo "ERROR: --region-deployment is required" >&2; return 2; }
+            resolve_environment_hosted_zone "$region_deployment" || return 1
             create_rc "$config_path" "$region_deployment"
             ;;
         delete-rc|DeleteRC)
@@ -942,61 +1045,14 @@ PROVISION_FAILURES=0
 # DNS Environment Zone (terraform block preserved)
 # ──────────────────────────────────────────────────────────────────────────────
 
-ENVIRONMENT_DOMAIN=""
-ENVIRONMENT_HOSTED_ZONE_ID=""
-
 for _first_region_dir in deploy/${ENVIRONMENT}/*/; do
     [ -d "$_first_region_dir" ] || continue
-    _prov_tf="${_first_region_dir}pipeline-provisioner-inputs/terraform.json"
-    if [ -f "$_prov_tf" ]; then
-        ENVIRONMENT_DOMAIN=$(jq -r '.domain // empty' "$_prov_tf" 2>/dev/null || echo "")
-        CREATE_ENVIRONMENT_ZONE=$(jq -r '.create_environment_zone // "false"' "$_prov_tf" 2>/dev/null || echo "false")
-    fi
+    _region_deployment=$(basename "$_first_region_dir")
     break
 done
 
-if [ -n "$ENVIRONMENT_DOMAIN" ] && [ "$CREATE_ENVIRONMENT_ZONE" = "true" ]; then
-    echo "Provisioning DNS environment zone: $ENVIRONMENT_DOMAIN"
-
-    cd terraform/config/dns-environment-zone
-
-    terraform init \
-        -reconfigure \
-        -backend-config="bucket=$TF_STATE_BUCKET" \
-        -backend-config="key=dns/environment-zone-${ENVIRONMENT}.tfstate" \
-        -backend-config="region=$TF_STATE_REGION" \
-        -backend-config="use_lockfile=true"
-
-    # Retry helper inline (terraform still used for DNS zone)
-    _max_attempts=3
-    _attempt=1
-    _wait_time=30
-    while [ $_attempt -le $_max_attempts ]; do
-        if terraform apply -auto-approve \
-            -var="environment_domain=${ENVIRONMENT_DOMAIN}" \
-            -var="environment=${ENVIRONMENT}"; then
-            if ! ENVIRONMENT_HOSTED_ZONE_ID=$(terraform output -raw zone_id); then
-                echo "ERROR: Failed to read zone_id after creating $ENVIRONMENT_DOMAIN" >&2
-                exit 1
-            fi
-            if [ -z "$ENVIRONMENT_HOSTED_ZONE_ID" ]; then
-                echo "ERROR: Terraform returned an empty zone_id for $ENVIRONMENT_DOMAIN" >&2
-                exit 1
-            fi
-            break
-        fi
-        if [ $_attempt -lt $_max_attempts ]; then
-            echo "DNS zone apply attempt $_attempt failed, retrying in ${_wait_time}s..."
-            sleep $_wait_time
-            _wait_time=$((_wait_time * 2))
-            _attempt=$((_attempt + 1))
-        else
-            echo "ERROR: Failed to create environment zone: $ENVIRONMENT_DOMAIN" >&2
-            exit 1
-        fi
-    done
-
-    cd ../../..
+if [[ -n "${_region_deployment:-}" ]]; then
+    resolve_environment_hosted_zone "$_region_deployment"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1030,7 +1086,10 @@ for region_dir in deploy/${ENVIRONMENT}/*/; do
         DELETE_FLAG="$FORCE_DELETE_ALL_PIPELINES"
 
         if [ "$DELETE_FLAG" == "true" ]; then
-            delete_rc "$REGIONAL_CONFIG"
+            if ! delete_rc "$REGIONAL_CONFIG"; then
+                echo "ERROR: Regional resource deletion failed for $REGIONAL_CONFIG" >&2
+                PROVISION_FAILURES=$((PROVISION_FAILURES + 1))
+            fi
         else
             if ! create_rc "$REGIONAL_CONFIG" "$REGION_DEPLOYMENT"; then
                 echo "ERROR: Regional resource provisioning failed for $REGIONAL_CONFIG" >&2
@@ -1053,7 +1112,10 @@ for region_dir in deploy/${ENVIRONMENT}/*/; do
             DELETE_FLAG="$FORCE_DELETE_ALL_PIPELINES"
 
             if [ "$DELETE_FLAG" == "true" ]; then
-                delete_mc "$mc_config"
+                if ! delete_mc "$mc_config"; then
+                    echo "ERROR: Management resource deletion failed for $mc_config" >&2
+                    PROVISION_FAILURES=$((PROVISION_FAILURES + 1))
+                fi
             else
                 if ! create_mc "$mc_config" "$REGION_DEPLOYMENT"; then
                     echo "ERROR: Management resource provisioning failed for $mc_config" >&2

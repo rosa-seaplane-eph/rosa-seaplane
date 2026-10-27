@@ -161,6 +161,16 @@ DELETE_FLAG="${IS_DESTROY:-false}"
 TERRAFORM_ACTION="apply"
 [ "${DELETE_FLAG}" == "true" ] && TERRAFORM_ACTION="destroy"
 
+if [[ "${TERRAFORM_ACTION}" == "apply" ]]; then
+    if [[ ! "${CODEBUILD_RESOLVED_SOURCE_VERSION:-}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+        echo "ERROR: CODEBUILD_RESOLVED_SOURCE_VERSION must be a full Git SHA for RC output correlation" >&2
+        exit 1
+    fi
+    export TF_VAR_provisioned_sha="${CODEBUILD_RESOLVED_SOURCE_VERSION,,}"
+    export TF_VAR_rc_provisioned_fingerprint
+    TF_VAR_rc_provisioned_fingerprint=$(tf_rc_source_fingerprint "$DEPLOY_CONFIG_FILE") || exit 1
+fi
+
 echo "RC ${REGIONAL_ID}: terraform ${TERRAFORM_ACTION} in ${TARGET_ACCOUNT_ID}/${TARGET_REGION}"
 
 print_provision_param_summary "RC" \
@@ -205,6 +215,8 @@ if [[ "${TERRAFORM_ACTION}" == "apply" ]]; then
         )
     fi
     _RC_REQUIRED_OUTPUTS+=(
+        "rc_provisioned_sha|^[0-9a-f]{40}$"
+        "rc_provisioned_fingerprint|^[0-9a-f]{64}$"
         "zoa_bucket_arn|^arn:"
         "zoa_kms_key_arn|^arn:"
         "zoa_table_name"

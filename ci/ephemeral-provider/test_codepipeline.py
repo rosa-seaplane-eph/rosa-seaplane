@@ -334,6 +334,21 @@ class StopActiveExecutionsTest(unittest.TestCase):
         client.stop_pipeline_execution.assert_not_called()
         client.get_pipeline_execution.assert_called_once()
 
+    def test_missing_execution_is_drained_during_teardown(self):
+        monitor, client = self._monitor()
+        client.get_pipeline_execution.side_effect = ClientError(
+            {"Error": {"Code": "PipelineExecutionNotFoundException"}},
+            "GetPipelineExecution",
+        )
+
+        monitor.stop_active_executions(["cluster-pipeline"])
+
+        client.stop_pipeline_execution.assert_called_once()
+        client.get_pipeline_execution.assert_called_once_with(
+            pipelineName="cluster-pipeline",
+            pipelineExecutionId="execution-123",
+        )
+
     def test_requests_all_stops_before_waiting_for_actions(self):
         monitor, client = self._monitor()
         client.get_pipeline_execution.return_value = {

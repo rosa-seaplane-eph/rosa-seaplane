@@ -24,6 +24,41 @@ locals {
   regional_assume_role_arns = var.regional_cluster == null ? [] : [
     "arn:${data.aws_partition.current.partition}:iam::${var.regional_cluster.account_id}:role/${var.regional_cluster.child_admin_role_name}"
   ]
+  regional_iam_role_arns = var.regional_cluster == null ? [] : [
+    "arn:${data.aws_partition.current.partition}:iam::${var.regional_cluster.account_id}:role/${var.regional_cluster.regional_id}-*"
+  ]
+  regional_iam_instance_profile_arns = var.regional_cluster == null ? [] : [
+    "arn:${data.aws_partition.current.partition}:iam::${var.regional_cluster.account_id}:instance-profile/${var.regional_cluster.regional_id}-*"
+  ]
+  regional_state_bucket_arn = var.regional_cluster == null ? "" : "arn:${data.aws_partition.current.partition}:s3:::terraform-state-${var.regional_cluster.account_id}-${var.regional_cluster.region}"
+  regional_state_object_arns = var.regional_cluster == null ? [] : [
+    "${local.regional_state_bucket_arn}/regional-cluster/${var.regional_cluster.regional_id}.tfstate",
+    "${local.regional_state_bucket_arn}/regional-cluster/${var.regional_cluster.regional_id}.tfstate.tflock"
+  ]
+  regional_s3_bucket_arns = var.regional_cluster == null ? [] : [
+    for bucket in [
+      "${var.regional_cluster.regional_id}-cloudtrail-${var.regional_cluster.account_id}",
+      "${var.regional_cluster.regional_id}-loki-logs-${var.regional_cluster.account_id}",
+      "${var.regional_cluster.regional_id}-thanos-metrics-${var.regional_cluster.account_id}",
+      "${var.regional_cluster.regional_id}-zoa-outputs-${var.regional_cluster.account_id}",
+      "${var.regional_cluster.regional_id}-sre-alb-logs-${var.regional_cluster.account_id}",
+      "hypershift-${var.regional_cluster.regional_id}-oidc-${var.regional_cluster.account_id}"
+    ] : "arn:${data.aws_partition.current.partition}:s3:::${bucket}"
+  ]
+  regional_s3_object_arns = [for bucket_arn in local.regional_s3_bucket_arns : "${bucket_arn}/*"]
+  regional_managed_iam_policy_arns = [
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSClusterPolicy",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKS_CNI_Policy",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+  ]
   # MC provisioning also reads state and updates discovery records in the RC account.
   management_assume_role_arns = distinct(concat(local.regional_assume_role_arns, [
     for cluster in var.management_clusters :

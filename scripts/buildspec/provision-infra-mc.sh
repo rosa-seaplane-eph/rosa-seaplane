@@ -79,31 +79,7 @@ else
 
     _RC_CONFIG_FILE=$(config_path_for_mode regional)
     _RC_REGIONAL_ID=$(jq -r '.regional_id // "regional"' "$_RC_CONFIG_FILE" 2>/dev/null || echo "regional")
-    wait_for_rc_outputs() {
-        local tf_dir="$1" max_attempts="$2" retry_delay="$3"
-        shift 3
-        local output_names=("$@")
-        local attempt
-
-        echo "Waiting for ${#output_names[@]} required RC Terraform outputs..."
-        echo "  Max wait: $((max_attempts * retry_delay / 60)) minutes (${max_attempts} attempts * ${retry_delay}s)"
-
-        for ((attempt = 1; attempt <= max_attempts; attempt++)); do
-            if tf_wait_for_outputs "${tf_dir}" 1 0 "${output_names[@]}"; then
-                echo "✓ Required RC outputs are ready; MC will continue while RC finishes"
-                return 0
-            fi
-
-            if [[ ${attempt} -lt ${max_attempts} ]]; then
-                echo "  RC dependency/output not ready (attempt ${attempt}/${max_attempts}); retrying in ${retry_delay}s..."
-                sleep "${retry_delay}"
-            fi
-        done
-
-        echo "ERROR: Required RC outputs were not ready after $((max_attempts * retry_delay / 60))+ minutes" >&2
-        return 1
-    }
-
+    _RC_EXPECTED_FINGERPRINT=$(tf_rc_source_fingerprint "$_RC_CONFIG_FILE") || exit 1
     export DNS_ZONE_OPERATOR_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-dns-zone-operator"
     export OIDC_WRITER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-writer"
     export OIDC_KEY_READER_ROLE_ARN="arn:aws:iam::${RESOLVED_REGIONAL_ACCOUNT_ID}:role/${_RC_REGIONAL_ID}-oidc-key-reader"
@@ -134,6 +110,7 @@ else
     export AWS_SESSION_TOKEN=$(echo "$_rc_creds" | awk '{print $3}')
 
     _RC_REQUIRED_OUTPUTS=(
+        "rc_provisioned_fingerprint=${_RC_EXPECTED_FINGERPRINT}"
         oidc_cloudfront_domain
         oidc_bucket_name
         oidc_bucket_arn
@@ -149,19 +126,13 @@ else
         zoa_lambda_ecr_url
     )
 
-    # Wait up to 45 minutes (90 attempts * 30s) for all required RC outputs.
-    # MC starts consuming them as soon as they are available; RC may continue
-    # with its remaining bootstrap/readiness steps in parallel. If RC fails
-    # before the outputs are ready, the output wait expires and the MC build
-    # reports the missing outputs.
-    wait_for_rc_outputs \
-        "$_RC_TF_DIR" \
-        90 \
-        30 \
-        "${_RC_REQUIRED_OUTPUTS[@]}" || {
+    # Wait for the RC output snapshot matching RC-relevant source files. MC-only
+    # commits leave this fingerprint unchanged and can reuse the existing RC state.
+    tf_wait_for_outputs "$_RC_TF_DIR" 90 30 "${_RC_REQUIRED_OUTPUTS[@]}" || {
         echo "ERROR: Failed to read required RC outputs for MC provisioning" >&2
         exit 1
     }
+    unset TF_VAR_rc_provisioned_sha TF_VAR_rc_provisioned_fingerprint
     # TF_VAR_* variables auto-exported by tf_wait_for_outputs
 
     # Read ZOA outputs with validation after the wait above. These values
@@ -250,7 +221,11 @@ if [ -n "${OIDC_KEY_READER_ROLE_ARN:-}" ]; then
     export TF_VAR_oidc_key_reader_role_arn="${OIDC_KEY_READER_ROLE_ARN}"
 fi
 
-export REGION_DEPLOYMENT=$(jq -r '.region' "$DEPLOY_CONFIG_FILE")
+REGION_DEPLOYMENT=$(jq -er '.region // empty' "$DEPLOY_CONFIG_FILE") || {
+    echo "ERROR: Could not read region from $DEPLOY_CONFIG_FILE" >&2
+    exit 1
+}
+export REGION_DEPLOYMENT
 export ENVIRONMENT="${ENVIRONMENT:-staging}"
 
 validate_aws_account_id "RESOLVED_REGIONAL_ACCOUNT_ID" "${RESOLVED_REGIONAL_ACCOUNT_ID}"

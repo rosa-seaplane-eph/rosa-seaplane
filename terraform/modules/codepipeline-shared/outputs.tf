@@ -8,6 +8,11 @@ output "artifact_bucket_arn" {
   value       = aws_s3_bucket.artifacts.arn
 }
 
+output "artifact_kms_key_arn" {
+  description = "KMS key ARN used to encrypt per-cluster CodePipeline artifacts."
+  value       = aws_kms_key.artifacts.arn
+}
+
 output "pipeline_role_arn" {
   description = "IAM role assumed by per-cluster CodePipelines."
   value       = aws_iam_role.pipeline.arn

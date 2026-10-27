@@ -529,10 +529,24 @@ class PipelineMonitor:
         while pending:
             remaining_executions = []
             for pipeline_name, execution_id in pending:
-                response = self.client.get_pipeline_execution(
-                    pipelineName=pipeline_name,
-                    pipelineExecutionId=execution_id,
-                )
+                try:
+                    response = self.client.get_pipeline_execution(
+                        pipelineName=pipeline_name,
+                        pipelineExecutionId=execution_id,
+                    )
+                except ClientError as exc:
+                    error_code = exc.response.get("Error", {}).get("Code", "Unknown")
+                    if error_code == "PipelineExecutionNotFoundException":
+                        log.info(
+                            "Execution %s on %s disappeared while draining; treating it as drained",
+                            execution_id,
+                            pipeline_name,
+                        )
+                        continue
+                    raise PipelineFailure(
+                        f"Could not verify execution {execution_id} on {pipeline_name} "
+                        f"while draining (AWS error {error_code}): {exc}"
+                    ) from exc
                 status = response.get("pipelineExecution", {}).get("status")
                 if status in ("Succeeded", "Failed", "Stopped", "Superseded", "Cancelled"):
                     log.info("Execution %s on %s drained (%s)", execution_id, pipeline_name, status)
@@ -589,6 +603,7 @@ class PipelineMonitor:
             for project_name, execution_id in builds
         }
         monitor_start = time.monotonic()
+        deadline = monitor_start + timeout
 
         while not all(state.done for state in states.values()):
             for index, (project_name, _) in enumerate(builds):
@@ -728,7 +743,7 @@ class PipelineMonitor:
                 result = self.build_monitor.wait_for_build(
                     state.build_id,
                     desired_sha,
-                    timeout=timeout,
+                    timeout=max(0, int(deadline - time.monotonic())),
                 )
             except Exception as exc:
                 result = getattr(exc, "result", None)
@@ -758,9 +773,10 @@ class PipelineMonitor:
             desired_sha[:7],
         )
         monitor_start = time.monotonic()
+        deadline = monitor_start + timeout
         execution_not_found_since = None
         execution_not_found_code = None
-        while time.monotonic() - monitor_start < timeout:
+        while time.monotonic() < deadline:
             try:
                 response = self.client.get_pipeline_execution(
                     pipelineName=pipeline_name,
@@ -813,7 +829,11 @@ class PipelineMonitor:
                     raise PipelineFailure(
                         f"Pipeline {pipeline_name} succeeded without a CodeBuild execution ID"
                     )
-                return self.build_monitor.wait_for_build(build_id, desired_sha, timeout)
+                return self.build_monitor.wait_for_build(
+                    build_id,
+                    desired_sha,
+                    max(0, int(deadline - time.monotonic())),
+                )
 
             if status in ("Failed", "Stopped", "Superseded", "Cancelled"):
                 raise PipelineFailure(
@@ -821,7 +841,7 @@ class PipelineMonitor:
                     f"status {status}"
                 )
 
-            time.sleep(POLL_INTERVAL)
+            time.sleep(min(POLL_INTERVAL, max(0, deadline - time.monotonic())))
 
         raise TimeoutError(
             f"Pipeline {pipeline_name} execution {pipeline_execution_id} did not complete "

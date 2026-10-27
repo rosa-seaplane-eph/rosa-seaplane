@@ -49,6 +49,7 @@ class BuildMonitor:
         """
         self.session = session
         self.client = session.client("codebuild")
+        self.logs_client = session.client("logs")
 
     def active_builds(self, project_names: list[str]) -> list[str]:
         """Return IDs of queued or running builds for the given projects."""
@@ -208,8 +209,7 @@ class BuildMonitor:
             return None
 
         try:
-            logs_client = self.session.client("logs")
-            response = logs_client.get_log_events(
+            response = self.logs_client.get_log_events(
                 logGroupName=group_name,
                 logStreamName=stream_name,
                 startFromHead=False,
@@ -318,7 +318,7 @@ class BuildMonitor:
         status = "UNKNOWN"
         last_build = None
         last_heartbeat = monitor_start
-        while time.monotonic() - monitor_start < timeout:
+        while last_build is None or time.monotonic() - monitor_start < timeout:
             try:
                 response = self.client.batch_get_builds(ids=[build_id])
                 builds = response.get("builds", [])
@@ -349,7 +349,9 @@ class BuildMonitor:
                     if now - last_heartbeat >= BUILD_PROGRESS_LOG_INTERVAL:
                         self._log_progress_heartbeat(build, monitor_start)
                         last_heartbeat = now
-                    time.sleep(POLL_INTERVAL)
+                    remaining = timeout - (time.monotonic() - monitor_start)
+                    if remaining > 0:
+                        time.sleep(min(POLL_INTERVAL, remaining))
                     continue
 
                 # Terminal statuses
@@ -364,7 +366,7 @@ class BuildMonitor:
                             "cannot verify the requested SHA."
                         )
 
-                    if resolved_sha != desired_sha:
+                    if resolved_sha.lower() != desired_sha.lower():
                         self._raise_build_failure(
                             build,
                             monitor_start,
@@ -387,7 +389,7 @@ class BuildMonitor:
                             "failed to export its status variables."
                         )
 
-                    if applied_sha != desired_sha:
+                    if (applied_sha or "").lower() != desired_sha.lower():
                         applied_sha_display = (applied_sha or "")[:7]
                         self._raise_build_failure(
                             build,

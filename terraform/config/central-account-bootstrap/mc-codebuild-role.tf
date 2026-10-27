@@ -81,6 +81,17 @@ resource "aws_iam_role_policy" "mc_codebuild_policy" {
         ]
       },
       {
+        Sid    = "PipelineArtifactEncryption"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:Encrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = module.codepipeline_shared.artifact_kms_key_arn
+      },
+      {
         Effect = "Allow"
         Action = [
           "ssm:GetParameter",

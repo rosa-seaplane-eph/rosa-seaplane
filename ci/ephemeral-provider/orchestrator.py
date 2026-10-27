@@ -278,6 +278,7 @@ class EphemeralEnvOrchestrator:
                 log.info("Resyncing ephemeral branch before resuming provisioning")
                 git.resync_eph_branch(self.eph_prefix)
                 self._inject_ephemeral_config(git)
+                self._apply_provision_overrides(git)
                 desired_sha = git.render_and_push(
                     "ci: resync ephemeral environment config",
                     force=True,
@@ -1146,11 +1147,14 @@ class EphemeralEnvOrchestrator:
         management_account_id = self.aws.get_target_account_id("management")
         state_bucket = f"terraform-state-{management_account_id}-{self.region}"
 
-        # The state-file interface currently stores one MC output file. Use the
-        # first rendered project so state lookup and output validation agree.
         if not self.mc_projects:
             log.warning("No MCs in provision_mcs — skipping MC state save")
             return
+        if len(self.mc_projects) > 1:
+            raise RuntimeError(
+                "Saving management Terraform outputs supports exactly one MC; "
+                f"found {len(self.mc_projects)} ({', '.join(self.mc_projects)})."
+            )
         mc_id = self.mc_projects[0]
 
         state_key = f"management-cluster/{mc_id}.tfstate"
@@ -1332,14 +1336,85 @@ class EphemeralEnvOrchestrator:
         # TODO: remove the manual resource bundle deletion in favor of just
         # calling the API Endpoint which does the full deletion on its own.
 
+        def list_all_clusters() -> list[dict] | None:
+            items = []
+            offset = 0
+            while not timed_out():
+                response = sigv4_request("GET", f"/api/v0/clusters?limit=100&offset={offset}")
+                if response is None:
+                    return None
+                page_items = response.get("items", [])
+                items.extend(page_items)
+                if not page_items or len(page_items) < 100:
+                    return items
+                offset += len(page_items)
+            return None
+
+        def count_all_clusters() -> int | None:
+            offset = 0
+            count = 0
+            while not timed_out():
+                response = sigv4_request("GET", f"/api/v0/clusters?limit=100&offset={offset}")
+                if response is None:
+                    return None
+                page_items = response.get("items", [])
+                count += len(page_items)
+                if len(page_items) < 100:
+                    return count
+                offset += len(page_items)
+            return None
+
+        def list_all_bundles() -> list[str] | None:
+            bundle_ids = []
+            seen_ids = set()
+            seen_pages = set()
+            page = 1
+            while not timed_out():
+                response = sigv4_request("GET", f"/api/v0/resource_bundles?page={page}&size=100")
+                if response is None:
+                    return None
+                items = response.get("items", [])
+                page_ids = tuple(item["id"] for item in items if item.get("id"))
+                if page_ids in seen_pages:
+                    log.warning("Resource bundle API repeated page %d; stopping purge listing", page)
+                    return None
+                seen_pages.add(page_ids)
+                for bundle_id in page_ids:
+                    if bundle_id not in seen_ids:
+                        seen_ids.add(bundle_id)
+                        bundle_ids.append(bundle_id)
+                if not items or len(items) < 100:
+                    return bundle_ids
+                page += 1
+            return None
+
+        def count_all_bundles() -> int | None:
+            bundle_ids = set()
+            seen_pages = set()
+            page = 1
+            while not timed_out():
+                response = sigv4_request("GET", f"/api/v0/resource_bundles?page={page}&size=100")
+                if response is None:
+                    return None
+                items = response.get("items", [])
+                page_ids = tuple(item["id"] for item in items if item.get("id"))
+                if page_ids in seen_pages:
+                    log.warning("Resource bundle API repeated page %d during verification", page)
+                    return None
+                seen_pages.add(page_ids)
+                bundle_ids.update(page_ids)
+                if len(items) < 100:
+                    return len(bundle_ids)
+                page += 1
+            return None
+
         # --- 1. Delete all clusters ---
         log.info("Listing clusters...")
-        clusters_resp = sigv4_request("GET", "/api/v0/clusters?limit=100")
-        if clusters_resp is None:
-            log.warning("Could not list clusters — skipping purge")
+        cluster_items = list_all_clusters()
+        if cluster_items is None:
+            log.warning("Could not list all clusters — skipping purge")
             return
 
-        cluster_items = clusters_resp.get("items", [])
         if cluster_items:
             log.info("Found %d cluster(s) — deleting...", len(cluster_items))
             for cluster in cluster_items:
@@ -1357,24 +1432,10 @@ class EphemeralEnvOrchestrator:
 
         # --- 2. Delete all resource bundles ---
         log.info("Listing resource bundles...")
-        all_bundle_ids = []
-        page = 1
-        while not timed_out():
-            bundles_resp = sigv4_request("GET", f"/api/v0/resource_bundles?page={page}&size=100")
-            if bundles_resp is None:
-                log.warning("Could not list resource bundles — skipping bundle deletion")
-                break
-            items = bundles_resp.get("items", [])
-            if not items:
-                break
-            for item in items:
-                bid = item.get("id", "")
-                if bid:
-                    all_bundle_ids.append(bid)
-            total = bundles_resp.get("total", 0)
-            if len(all_bundle_ids) >= total:
-                break
-            page += 1
+        all_bundle_ids = list_all_bundles()
+        if all_bundle_ids is None:
+            log.warning("Could not list all resource bundles — skipping bundle deletion")
+            return
 
         if all_bundle_ids:
             log.info("Found %d resource bundle(s) — deleting...", len(all_bundle_ids))
@@ -1392,10 +1453,9 @@ class EphemeralEnvOrchestrator:
         # --- 3. Verify clusters gone ---
         log.info("Verifying cluster deletion...")
         while not timed_out():
-            resp = sigv4_request("GET", "/api/v0/clusters?limit=100")
-            if resp is None:
+            remaining = count_all_clusters()
+            if remaining is None:
                 break
-            remaining = len(resp.get("items", []))
             if remaining == 0:
                 log.info("All clusters confirmed deleted.")
                 break
@@ -1408,10 +1468,9 @@ class EphemeralEnvOrchestrator:
         # --- 4. Verify bundles gone ---
         log.info("Verifying resource bundle removal...")
         while not timed_out():
-            resp = sigv4_request("GET", "/api/v0/resource_bundles?page=1&size=100")
-            if resp is None:
+            remaining = count_all_bundles()
+            if remaining is None:
                 break
-            remaining = len(resp.get("items", []))
             if remaining == 0:
                 log.info("All resource bundles confirmed removed.")
                 break

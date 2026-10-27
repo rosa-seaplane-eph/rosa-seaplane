@@ -505,6 +505,7 @@ cmd_provision() {
 
 cmd_provision_resume() {
     local command_start=$SECONDS
+    RESUME_COMPLETED=false
     select_env "STATE=provisioning-failed" \
         "Select failed environment to resume:" \
         "No failed provisioning environments found."
@@ -536,11 +537,14 @@ cmd_provision_resume() {
     echo "  IMAGE:             $CI_IMAGE"
 
     local tmpdir artifacts_dir
-    tmpdir=$(mktemp -d)
+    RESUME_TMPDIR=$(mktemp -d)
+    tmpdir="$RESUME_TMPDIR"
     artifacts_dir="${ARTIFACTS_DIR:-${ARTIFACT_DIR:-${REPO_ROOT}/.ephemeral-artifacts/${BUILD_ID}}}"
     mkdir -p "$artifacts_dir"
     _prev_trap=$(trap -p EXIT | sed "s/^trap -- '//;s/' EXIT$//")
-    trap 'rm -rf "${tmpdir:-}"; eval "$_prev_trap"' EXIT
+    trap 'exit_code=$?; rm -rf "${RESUME_TMPDIR:-}"; if [[ "${RESUME_COMPLETED:-false}" != true ]]; then update_state "$BUILD_ID" "provisioning-failed" || true; fi; eval "$_prev_trap"; exit "$exit_code"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
 
     echo "  ARTIFACTS_DIR:     $artifacts_dir"
 
@@ -609,6 +613,7 @@ cmd_provision_resume() {
         record_ready_environment \
             "$BUILD_ID" "$region" "$api_url" "$rhobs_api_url" \
             "$zoa_rc_api_url" "$zoa_mc_api_url" "$zoa_deployment_name" "$eph_branch"
+        RESUME_COMPLETED=true
         echo "Environment $BUILD_ID provisioning resumed successfully."
     else
         update_state "$BUILD_ID" "provisioning-failed"

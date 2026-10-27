@@ -21,6 +21,26 @@ variable "region" {
   type        = string
 }
 
+variable "provisioned_sha" {
+  description = "Git commit applied by the RC pipeline for operational traceability."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.provisioned_sha == "" || can(regex("^[0-9a-f]{40}$", var.provisioned_sha))
+    error_message = "provisioned_sha must be empty or a full lowercase Git SHA."
+  }
+}
+
+variable "rc_provisioned_fingerprint" {
+  description = "SHA-256 fingerprint of the RC pipeline inputs applied to this regional cluster."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.rc_provisioned_fingerprint == "" || can(regex("^[0-9a-f]{64}$", var.rc_provisioned_fingerprint))
+    error_message = "rc_provisioned_fingerprint must be empty or a lowercase 64-character SHA-256 digest."
+  }
+}
+
 variable "deployment_name" {
   description = "Logical deployment identifier for DNS zone naming. Equals region for normal deployments; includes a suffix for CI/ephemeral (e.g. us-east-1-xg4y)."
   type        = string

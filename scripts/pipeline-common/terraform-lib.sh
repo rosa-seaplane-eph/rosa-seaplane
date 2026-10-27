@@ -179,16 +179,61 @@ tf_require_nonempty_json_vars() {
     fi
 }
 
+# Fingerprint the source files covered by the RC pipeline's file-path filters.
+# MC builds use this to wait only when RC-relevant inputs changed; MC-only source
+# changes can continue using the existing RC Terraform outputs.
+tf_rc_source_fingerprint() {
+    local rc_config_file="$1"
+    local region_dir="${rc_config_file%/pipeline-regional-cluster-inputs/terraform.json}"
+    local -a paths=(
+        config
+        scripts/render.py
+        scripts/pipeline-common
+        scripts/buildspec/bootstrap-argocd-rc.sh
+        scripts/buildspec/build-zoa-lambda.sh
+        scripts/buildspec/provision-cluster.sh
+        scripts/buildspec/provision-infra-rc.sh
+        scripts/buildspec/register.sh
+        scripts/buildspec/wait-for-regional-api.sh
+        terraform/config/codebuild-regional-cluster
+        terraform/config/regional-cluster
+        terraform/modules
+        "${region_dir}/argocd-values-regional-cluster.yaml"
+        "${region_dir}/argocd-bootstrap-regional-cluster"
+        "${region_dir}/pipeline-regional-cluster-inputs"
+    )
+    local -a existing_paths=()
+    local path
+
+    for path in "${paths[@]}"; do
+        [[ -e "$path" ]] && existing_paths+=("$path")
+    done
+    if [[ ! -f "$rc_config_file" ]]; then
+        echo "ERROR: RC deployment config not found for source fingerprint: $rc_config_file" >&2
+        return 1
+    fi
+    if [[ "$region_dir" == "$rc_config_file" ]]; then
+        existing_paths+=("$rc_config_file")
+    fi
+
+    find "${existing_paths[@]}" -type f -print0 \
+        | sort -z \
+        | xargs -0 -r sha256sum \
+        | sha256sum \
+        | awk '{print $1}'
+}
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Function: tf_wait_for_outputs
-# Poll terraform outputs until all required outputs are non-empty.
+# Poll terraform outputs until required values are non-empty and any requested
+# output/value pairs match. Automatically exports values as TF_VAR_<name>.
 # Automatically exports outputs as TF_VAR_<name> environment variables.
 #
 # Args:
 #   $1 - Terraform directory to read outputs from
 #   $2 - Maximum number of retry attempts
 #   $3 - Retry delay in seconds
-#   $@ - List of output names to wait for
+#   $@ - Output names, or output_name=expected_value pairs
 #
 # Returns:
 #   0 if all outputs found within max attempts, 1 if timeout
@@ -242,15 +287,22 @@ tf_wait_for_outputs() {
         outputs_json=$(terraform -chdir="${tf_dir}" output -json 2>/dev/null || true)
 
         for output_name in "${output_names[@]}"; do
-            local value
-            value=$(jq -r --arg name "${output_name}" '.[$name].value // empty' <<<"${outputs_json}" 2>/dev/null || true)
+            local name expected value
+            name="${output_name%%=*}"
+            expected=""
+            [[ "$output_name" == *=* ]] && expected="${output_name#*=}"
+            value=$(jq -r --arg name "${name}" '.[$name].value // empty' <<<"${outputs_json}" 2>/dev/null || true)
 
-            if [ -z "${value}" ]; then
+            if [ -z "${value}" ] || { [[ "$output_name" == *=* ]] && [[ "$value" != "$expected" ]]; }; then
                 all_present=false
-                missing_outputs+=("${output_name}")
+                if [[ "$output_name" == *=* ]]; then
+                    missing_outputs+=("${name} (expected ${expected}, got ${value:-empty})")
+                else
+                    missing_outputs+=("${name}")
+                fi
             else
                 # Export as TF_VAR_<name> for terraform consumption
-                export "TF_VAR_${output_name}=${value}"
+                export "TF_VAR_${name}=${value}"
             fi
         done
 
@@ -272,12 +324,17 @@ tf_wait_for_outputs() {
     local outputs_json
     outputs_json=$(terraform -chdir="${tf_dir}" output -json 2>/dev/null || true)
     for output_name in "${output_names[@]}"; do
-        local value
-        value=$(jq -r --arg name "${output_name}" '.[$name].value // empty' <<<"${outputs_json}" 2>/dev/null || true)
+        local name expected value
+        name="${output_name%%=*}"
+        expected=""
+        [[ "$output_name" == *=* ]] && expected="${output_name#*=}"
+        value=$(jq -r --arg name "${name}" '.[$name].value // empty' <<<"${outputs_json}" 2>/dev/null || true)
         if [ -z "${value}" ]; then
-            echo "    ✗ ${output_name}: NOT FOUND" >&2
+            echo "    ✗ ${name}: NOT FOUND" >&2
+        elif [[ "$output_name" == *=* ]] && [[ "$value" != "$expected" ]]; then
+            echo "    ✗ ${name}: expected ${expected}, got ${value}" >&2
         else
-            echo "    ✓ ${output_name}: available" >&2
+            echo "    ✓ ${name}: available" >&2
         fi
     done
 

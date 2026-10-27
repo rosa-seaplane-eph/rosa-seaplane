@@ -50,20 +50,24 @@ variable "environment" {
 }
 
 variable "regional_cluster" {
-  description = "Rendered RC project and resolved target account/administrator role. Null permits destruction from a fresh checkout without deployment inputs."
+  description = "Rendered RC identity and resolved target account/administrator role. Null permits destruction from a fresh checkout without deployment inputs."
   type = object({
     project_name          = string
     account_id            = string
     child_admin_role_name = string
+    region                = string
+    regional_id           = string
   })
   default = null
   validation {
     condition = var.regional_cluster == null ? true : (
       can(regex("^[a-z0-9][a-z0-9-]*$", var.regional_cluster.project_name)) &&
       can(regex("^[0-9]{12}$", var.regional_cluster.account_id)) &&
-      can(regex("^[A-Za-z0-9_+=,.@-]+(/[A-Za-z0-9_+=,.@-]+)*$", var.regional_cluster.child_admin_role_name))
+      can(regex("^[A-Za-z0-9_+=,.@-]+(/[A-Za-z0-9_+=,.@-]+)*$", var.regional_cluster.child_admin_role_name)) &&
+      can(regex("^[a-z0-9][a-z0-9-]*$", var.regional_cluster.regional_id)) &&
+      can(regex("^[a-z0-9-]+$", var.regional_cluster.region))
     )
-    error_message = "regional_cluster must contain an exact cluster name, 12-digit account ID, and administrator role name/path without wildcards."
+    error_message = "regional_cluster must contain an exact cluster name, 12-digit account ID, administrator role name/path, region, and IAM resource prefix without wildcards."
   }
 }
 
