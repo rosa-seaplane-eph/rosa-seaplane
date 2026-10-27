@@ -57,6 +57,21 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
         ]
       },
       {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
+        ]
+        Resource = [
+          "arn:aws:s3:::terraform-state-*",
+          "arn:aws:s3:::terraform-state-*/*"
+        ]
+      },
+      {
         Sid    = "PipelineArtifactRead"
         Effect = "Allow"
         Action = [
@@ -118,38 +133,6 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
         Action   = ["route53:*"]
         Resource = "*"
       }
-      ], var.regional_cluster == null ? [] : [
-      {
-        Sid      = "RegionalTerraformStateList"
-        Effect   = "Allow"
-        Action   = ["s3:ListBucket"]
-        Resource = local.regional_state_bucket_arn
-        Condition = {
-          StringLike = {
-            "s3:prefix" = [
-              "regional-cluster/${var.regional_cluster.regional_id}.tfstate",
-              "regional-cluster/${var.regional_cluster.regional_id}.tfstate.tflock"
-            ]
-          }
-        }
-      },
-      {
-        Sid      = "RegionalTerraformStateBucketRead"
-        Effect   = "Allow"
-        Action   = ["s3:GetBucketLocation"]
-        Resource = local.regional_state_bucket_arn
-      },
-      {
-        Sid    = "RegionalTerraformStateObjects"
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:GetObjectVersion",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = local.regional_state_object_arns
-      }
       ], length(local.regional_assume_role_arns) > 0 ? [
       {
         Effect   = "Allow"
@@ -160,12 +143,13 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
       # Preserve the upstream RC provisioning permissions for deployments where
       # TARGET_ACCOUNT_ID is the central account and no child role is assumed.
       {
-        Sid    = "RegionalServiceProvisioning"
         Effect = "Allow"
         Action = [
           "logs:*",
           "ec2:*",
           "eks:*",
+          "iam:*",
+          "s3:*",
           "ecs:*",
           "kms:*",
           "apigateway:*",
@@ -184,113 +168,6 @@ resource "aws_iam_role_policy" "rc_codebuild_policy" {
           "dynamodb:*"
         ]
         Resource = "*"
-      },
-      {
-        Sid    = "RegionalIAMRoleManagement"
-        Effect = "Allow"
-        Action = [
-          "iam:CreateRole",
-          "iam:DeleteRole",
-          "iam:GetRole",
-          "iam:UpdateAssumeRolePolicy",
-          "iam:TagRole",
-          "iam:UntagRole",
-          "iam:ListRoleTags",
-          "iam:PutRolePolicy",
-          "iam:GetRolePolicy",
-          "iam:DeleteRolePolicy",
-          "iam:ListRolePolicies",
-          "iam:ListAttachedRolePolicies",
-          "iam:ListInstanceProfilesForRole"
-        ]
-        Resource = local.regional_iam_role_arns
-      },
-      {
-        Sid    = "RegionalIAMManagedPolicyAttachments"
-        Effect = "Allow"
-        Action = [
-          "iam:AttachRolePolicy",
-          "iam:DetachRolePolicy"
-        ]
-        Resource = concat(local.regional_iam_role_arns, local.regional_managed_iam_policy_arns)
-      },
-      {
-        Sid    = "RegionalIAMManagedPolicyRead"
-        Effect = "Allow"
-        Action = [
-          "iam:GetPolicy",
-          "iam:GetPolicyVersion"
-        ]
-        Resource = local.regional_managed_iam_policy_arns
-      },
-      {
-        Sid      = "RegionalIAMPassRole"
-        Effect   = "Allow"
-        Action   = ["iam:PassRole"]
-        Resource = local.regional_iam_role_arns
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = [
-              "apigateway.amazonaws.com",
-              "cloudtrail.amazonaws.com",
-              "ecs-tasks.amazonaws.com",
-              "events.amazonaws.com",
-              "eks.amazonaws.com",
-              "lambda.amazonaws.com",
-              "logs.amazonaws.com",
-              "logs.${var.region}.amazonaws.com",
-              "monitoring.rds.amazonaws.com",
-              "pods.eks.amazonaws.com",
-              "scheduler.amazonaws.com"
-            ]
-          }
-        }
-      },
-      {
-        Sid    = "RegionalIAMInstanceProfiles"
-        Effect = "Allow"
-        Action = [
-          "iam:CreateInstanceProfile",
-          "iam:DeleteInstanceProfile",
-          "iam:GetInstanceProfile",
-          "iam:TagInstanceProfile",
-          "iam:UntagInstanceProfile",
-          "iam:ListInstanceProfileTags"
-        ]
-        Resource = local.regional_iam_instance_profile_arns
-      },
-      {
-        Sid    = "RegionalIAMInstanceProfileRoles"
-        Effect = "Allow"
-        Action = [
-          "iam:AddRoleToInstanceProfile",
-          "iam:RemoveRoleFromInstanceProfile"
-        ]
-        Resource = concat(local.regional_iam_role_arns, local.regional_iam_instance_profile_arns)
-      },
-      {
-        Sid      = "RegionalIAMServiceLinkedRoles"
-        Effect   = "Allow"
-        Action   = ["iam:CreateServiceLinkedRole"]
-        Resource = "*"
-        Condition = {
-          StringEquals = {
-            "iam:AWSServiceName" = [
-              "autoscaling.amazonaws.com",
-              "elasticache.amazonaws.com",
-              "elasticloadbalancing.amazonaws.com",
-              "eks.amazonaws.com",
-              "ecs.amazonaws.com",
-              "rds.amazonaws.com"
-            ]
-          }
-        }
-      },
-      {
-        Sid      = "RegionalS3Resources"
-        Effect   = "Allow"
-        Action   = ["s3:*"]
-        Resource = concat(local.regional_s3_bucket_arns, local.regional_s3_object_arns)
       }
     ] : [])
   })

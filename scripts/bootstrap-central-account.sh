@@ -203,17 +203,12 @@ read_cluster_iam_descriptor() {
     if ! descriptor=$(jq -ce --arg id_field "$id_field" --arg region "$REGION" '
         select(.region == $region)
         | {project_name: .[$id_field], account_id, child_admin_role_name}
-          + (if $id_field == "regional_id" then {regional_id, region} else {} end)
         | select(
             (.project_name | type == "string") and
             (.project_name | test("^[a-z0-9][a-z0-9-]*$")) and
             (.account_id | type == "string") and (.account_id | length > 0) and
             (.child_admin_role_name | type == "string") and
-            (.child_admin_role_name | test("^[A-Za-z0-9_+=,.@-]+(/[A-Za-z0-9_+=,.@-]+)*$")) and
-            ($id_field != "regional_id" or (
-                (.regional_id | type == "string") and (.regional_id | test("^[a-z0-9][a-z0-9-]*$")) and
-                (.region | type == "string") and (.region | test("^[a-z0-9-]+$"))
-            ))
+            (.child_admin_role_name | test("^[A-Za-z0-9_+=,.@-]+(/[A-Za-z0-9_+=,.@-]+)*$"))
         )' "$config_file"); then
         echo "ERROR: Invalid or missing rendered cluster IAM configuration: $config_file" >&2
         return 1
