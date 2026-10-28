@@ -151,9 +151,9 @@ Not every job needs every profile. The table below shows which profiles each job
 
 ### How profiles are loaded
 
-**CI (Prow):** Each Vault secret contains a pre-built `aws_config` file with the profiles that job type needs. Prow mounts it at `/var/run/rosa-credentials/aws_config`. Scripts source [`ci/setup-aws-profiles.sh`](setup-aws-profiles.sh) which sets `AWS_CONFIG_FILE` to point at this file and exports `AWS_ROLE_SESSION_NAME=seaplane-e2e` (override with `AWS_CI_ROLE_SESSION_NAME`) so assume-role profiles use a stable STS session name across e2e subprocesses (ZOA Access operator attribution).
+**CI (Prow):** Each Vault secret contains a pre-built `aws_config` file with the profiles that job type needs. Prow mounts it at `/var/run/rosa-credentials/aws_config`. Scripts source [`ci/setup-aws-profiles.sh`](setup-aws-profiles.sh) which sets `AWS_CONFIG_FILE` and exports `AWS_ROLE_SESSION_NAME=seaplane-e2e` for AWS CLI. [`ci/e2e-tests.sh`](e2e-tests.sh) then calls [`write_e2e_host_aws_config`](../scripts/dev/env-common.sh) — the same `resolve_creds` / `write_container_config` path as dev. Each assume logs one line: `Resolving credentials for profile … (RoleSessionName=seaplane-e2e)`.
 
-**Local development:** The dev scripts (`scripts/dev/ephemeral-env.sh`, `scripts/dev/int-env.sh`) read account IDs from `rosa-seaplane-internal` (or a custom path via `RRP_ACCOUNTS_DEV`/`RRP_ACCOUNTS_INT`) and obtain STS credentials via SAML, writing them to a config file with the same `rrp-*` profile names so containers see an identical interface. E2e containers receive the same `AWS_ROLE_SESSION_NAME` via `container_aws_role_session_name_flags` in [`scripts/dev/env-common.sh`](../scripts/dev/env-common.sh); host-side `sts assume-role` for container static creds uses the same session name (`seaplane-e2e` by default).
+**Local development:** The dev scripts (`scripts/dev/ephemeral-env.sh`, `scripts/dev/int-env.sh`) read account IDs from `rosa-seaplane-internal` (or a custom path via `RRP_ACCOUNTS_DEV`/`RRP_ACCOUNTS_INT`) and obtain STS credentials via SAML, writing them to a config file with the same `rrp-*` profile names so containers see an identical interface. E2e containers use `write_container_config` in [`scripts/dev/env-common.sh`](../scripts/dev/env-common.sh) with the same `seaplane-e2e` session name.
 
 ### CI Vault secrets
 

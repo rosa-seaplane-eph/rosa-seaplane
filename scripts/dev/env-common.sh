@@ -13,6 +13,7 @@
 #   init_aws_config       — Create temp AWS config dir + EXIT trap
 #   container_aws_role_session_name_flags — podman -e for AWS_ROLE_SESSION_NAME in e2e containers
 #   write_container_config — Resolve profiles to static creds for container mount
+#   write_e2e_host_aws_config — CI e2e host: resolve assume-role profiles (stable session name)
 #   bastion_run_task      — Core ECS bastion task launch and readiness logic
 #   chain_exit_trap       — Chain a new EXIT handler with any existing trap
 #   bastion_port_forward  — kubectl port-forward on bastion + SSM to localhost
@@ -57,7 +58,8 @@ resolve_base_creds() {
 # Sets: _CRED_AK, _CRED_SK, _CRED_ST
 resolve_creds() {
     local profile="$1"
-    echo "Resolving credentials for profile $profile..."
+    local session_name="${AWS_CI_ROLE_SESSION_NAME:-seaplane-e2e}"
+    echo "Resolving credentials for profile ${profile} (RoleSessionName=${session_name})..."
 
     local role_arn base_profile
     role_arn=$(aws configure get role_arn --profile "$profile" 2>/dev/null) \
@@ -193,7 +195,7 @@ write_container_config() {
     local spec host_profile container_profile region
     for spec in "$@"; do
         read -r host_profile container_profile region <<< "$spec"
-        resolve_creds "$host_profile"
+        resolve_creds "$host_profile" || die "Failed to resolve profile ${host_profile}"
 
         [[ "$first" == "true" ]] || echo "" >> "$_CONTAINER_CONFIG"
         first=false
@@ -208,6 +210,34 @@ EOF
     done
 
     _CONTAINER_AWS_FLAGS="-v ${_CONTAINER_CONFIG}:/tmp/aws-config:ro,z -e AWS_CONFIG_FILE=/tmp/aws-config -e AWS_SHARED_CREDENTIALS_FILE=/dev/null $(container_aws_role_session_name_flags)"
+}
+
+# ci/e2e-tests.sh on Prow: resolve assume-role profiles from the mounted aws_config
+# with resolve_creds (same RoleSessionName as dev write_container_config). Go SDK and
+# multi-process e2e need static keys; AWS CLI-only jobs can keep setup-aws-profiles alone.
+write_e2e_host_aws_config() {
+    [[ "${E2E_HOST_AWS_CONFIG_READY:-}" == "1" ]] && return 0
+    [[ -r "${AWS_CONFIG_FILE:-}" ]] || return 0
+
+    local region="${AWS_DEFAULT_REGION:-us-east-1}"
+    local -a specs=()
+    local p role_arn
+    while IFS= read -r p; do
+        [[ -z "$p" ]] && continue
+        role_arn=$(aws configure get role_arn --profile "$p" 2>/dev/null || true)
+        [[ -n "$role_arn" ]] || continue
+        specs+=("${p} ${p} ${region}")
+    done < <(aws configure list-profiles 2>/dev/null)
+
+    [[ ${#specs[@]} -eq 0 ]] && {
+        echo "WARNING: write_e2e_host_aws_config: no assume-role profiles in ${AWS_CONFIG_FILE}" >&2
+        return 0
+    }
+
+    write_container_config "${specs[@]}"
+    export AWS_CONFIG_FILE="$_CONTAINER_CONFIG"
+    export AWS_SHARED_CREDENTIALS_FILE=/dev/null
+    export E2E_HOST_AWS_CONFIG_READY=1
 }
 
 # Core ECS bastion task launch and readiness logic.
