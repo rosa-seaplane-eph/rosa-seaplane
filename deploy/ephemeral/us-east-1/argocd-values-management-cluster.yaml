@@ -11,11 +11,11 @@ eksNodePool:
   - m7i-flex
   ami:
     family: AL2023
-    id: ami-00ad69a77c77c2a61
+    id: ami-056d5e72aa5cf51f1
   rootVolumeSize: 50Gi
 hypershift:
   oidcStorageS3Bucket:
     name: hypershift-mc-us-east-1
     region: us-east-1
   externalDns:
-    domain: us-east-1.dev0.rosa.devshift.net
+    domain: us-east-1-eph-9bab83e3.dev0.rosa.devshift.net
