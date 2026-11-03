@@ -85,6 +85,19 @@ spec:
           expr: |
             changes(zoa:gc_last_run[30m])
 
+        - record: zoa:reaper_last_run
+          expr: |
+            max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[10m]))
+
+        - record: zoa:reaper_tick_count
+          expr: |
+            changes(zoa:reaper_last_run[30m])
+
+        - record: zoa:identity_bridge_miss_rate
+          expr: |
+            sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="miss"})
+            / sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"})
+
     - name: zoa-alerts
       rules:
         # ──────────────────────────────────────────────────────────────
@@ -352,6 +365,57 @@ spec:
               3. If ZOAReconcilerStalled is also firing: the worker Lambda itself is likely broken, prioritize that alert.
               4. Impact: stale ServiceAccounts and RBAC bindings accumulate in the MC. Not immediately dangerous but creates clutter.
               5. Alert auto-recovers when GC resumes ticking.
+
+        # Boundary identity bridge miss rate — task-shaped API callers without Dynamo session row.
+        - alert: ZOAIdentityBridgeMissRateHigh
+          expr: |
+            (zoa:identity_bridge_miss_rate > 0.25)
+            and
+            (sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"}) > 5)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA identity bridge miss rate elevated
+            description: >-
+              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} missed
+              >25% of boundary task lookups for 15m. TAs may run with task-id
+              operator attribution instead of the human SRE.
+            runbook: >-
+              1. Check Access session start / RunTask path: session rows should get taskId after boundary starts.
+              2. Compare bridge hit/miss/error in ZOA dashboard (Worker/API section).
+              3. Worker Dynamo errors: check ZOAIdentityBridgeLookup error outcome and DynamoDB health.
+              4. Until boundary-only IAM: laptop→API path does not increment this metric.
+
+        # Session reaper tick health (Worker route reaper, ~5m).
+        - alert: ZOAReaperStalled
+          expr: |
+            (
+              zoa:reaper_tick_count == 0
+              and on(cluster) (count_over_time(aws_zoa_reaper_last_run_maximum[1h]) > 3)
+            )
+            or
+            (
+              (time() - zoa:reaper_last_run > 1800)
+              and (zoa:reaper_last_run > 0)
+            )
+            or
+            (
+              max by (cluster) (count_over_time(aws_zoa_reaper_last_run_maximum[1h])) > 3
+              unless on(cluster) max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[30m]))
+            )
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA session reaper has stopped ticking
+            description: >-
+              ZOA reaper on cluster {{ "{{" }} $labels.cluster {{ "}}" }} has not ticked
+              in >30m (expected every 5min). Boundary sessions may exceed deadline/idle policy.
+            runbook: >-
+              1. Check EventBridge worker schedule includes route reaper.
+              2. Check worker Lambda logs for reaper errors.
+              3. Alert auto-recovers when reaper resumes ticking.
 
         # GC is encountering errors cleaning up resources.
         - alert: ZOAGCErrors

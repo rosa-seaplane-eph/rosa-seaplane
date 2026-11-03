@@ -331,6 +331,21 @@ prometheus-yet-another-cloudwatch-exporter:
             nilToZero: false
             period: 600
             length: 600
+          - name: ReaperDuration
+            statistics: [Average, p99]
+            period: 600
+            length: 600
+          - name: ReaperErrors
+            statistics: [Sum]
+            period: 600
+            length: 600
+          - name: ReaperLastRun
+            statistics: [Maximum]
+            nilToZero: false
+            period: 600
+            length: 600
+          - name: IdentityBridgeLookup
+            statistics: [Sum]
           - name: CircuitBreakerStateChange
             statistics: [Sum]
 
