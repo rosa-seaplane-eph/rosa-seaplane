@@ -10,14 +10,14 @@ This document covers **YACE**, **Prometheus recording rules**, **alerting rules*
 
 ## Source of truth files
 
-| Artifact | Path |
-| -------- | ---- |
-| YACE RC | `argocd/config/regional-cluster/cloudwatch-exporter/values.yaml` |
-| YACE MC | `argocd/config/management-cluster/cloudwatch-exporter/values.yaml` |
+| Artifact       | Path                                                               |
+| -------------- | ------------------------------------------------------------------ |
+| YACE RC        | `argocd/config/regional-cluster/cloudwatch-exporter/values.yaml`   |
+| YACE MC        | `argocd/config/management-cluster/cloudwatch-exporter/values.yaml` |
 | PrometheusRule | `argocd/config/regional-cluster/alerting-rules/templates/zoa.yaml` |
-| Grafana | `argocd/config/regional-cluster/grafana/dashboards/zoa/zoa.json` |
-| promtool tests | `ci/promtool-test/zoa-rules_test.yaml` |
-| EMF catalog | rosa-seaplane-zoa `docs/observability.md` |
+| Grafana        | `argocd/config/regional-cluster/grafana/dashboards/zoa/zoa.json`   |
+| promtool tests | `ci/promtool-test/zoa-rules_test.yaml`                             |
+| EMF catalog    | rosa-seaplane-zoa `docs/observability.md`                          |
 
 ---
 
@@ -25,14 +25,14 @@ This document covers **YACE**, **Prometheus recording rules**, **alerting rules*
 
 Grafana variable **`$cluster`** today maps to **EKS cluster id** (RC regional id or `mc01`, …) and YACE **`dimension_Cluster`** on EMF for API/Worker.
 
-| Signal | Scope | `$cluster` / filter | Where in UI |
-| ------ | ----- | ----------------- | ----------- |
-| Access HTTP EMF | **Per deployment** (one Access Lambda per RC) | **`DEPLOYMENT_NAME`** (or chosen deployment label in EMF) — **same value when user picks RC or any MC** in a deployment | **New section: Access & boundary sessions** |
-| Access Lambda (`AWS/Lambda` `*-zoa-access`) | Per deployment (RC account) | Function name / tags; visible regardless of MC selection | Same section |
-| Identity bridge EMF | **Per API VPC** (RC + each MC) | `dimension_Cluster` = target cluster id | Sub-panel under Access & boundary **or** Worker/API context |
-| Reaper tick EMF | **Per target VPC** | `dimension_Cluster` = worker’s `TARGET_CLUSTER` | **Worker Pipeline** (extend existing) |
-| ECS `RunningTaskCount` | **Per target VPC** | ECS cluster `{cluster_id}-zoa-boundary`; YACE tag `Cluster=<cluster_id>` | Access & boundary **per-VPC row** (follows `$cluster`) |
-| TA / API HTTP (existing) | Per API VPC | Existing `$cluster` | Existing sections |
+| Signal                                      | Scope                                         | `$cluster` / filter                                                                                                     | Where in UI                                                 |
+| ------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Access HTTP EMF                             | **Per deployment** (one Access Lambda per RC) | **`DEPLOYMENT_NAME`** (or chosen deployment label in EMF) — **same value when user picks RC or any MC** in a deployment | **New section: Access & boundary sessions**                 |
+| Access Lambda (`AWS/Lambda` `*-zoa-access`) | Per deployment (RC account)                   | Function name / tags; visible regardless of MC selection                                                                | Same section                                                |
+| Identity bridge EMF                         | **Per API VPC** (RC + each MC)                | `dimension_Cluster` = target cluster id                                                                                 | Sub-panel under Access & boundary **or** Worker/API context |
+| Reaper tick EMF                             | **Per target VPC**                            | `dimension_Cluster` = worker’s `TARGET_CLUSTER`                                                                         | **Worker Pipeline** (extend existing)                       |
+| ECS `RunningTaskCount`                      | **Per target VPC**                            | ECS cluster `{cluster_id}-zoa-boundary`; YACE tag `Cluster=<cluster_id>`                                                | Access & boundary **per-VPC row** (follows `$cluster`)      |
+| TA / API HTTP (existing)                    | Per API VPC                                   | Existing `$cluster`                                                                                                     | Existing sections                                           |
 
 **Important:** When an operator selects **`mc01`** on the dashboard, **Access** panels should still show data (deployment-global). Use PromQL that does **not** filter Access series on `$cluster=mc01` only — e.g. separate variable `$deployment` or fixed deployment label from datasource context. Document in dashboard description.
 
@@ -49,12 +49,12 @@ Grafana variable **`$cluster`** today maps to **EKS cluster id** (RC regional id
 
 Add to existing `customNamespace` list (same job `name: zoa`, `namespace: ZOA`):
 
-| Metric | Statistics | Period notes |
-| ------ | ---------- | ------------ |
-| `ReaperDuration` | Average, p99 | 120s |
-| `ReaperErrors` | Sum | 120s |
-| `ReaperLastRun` | Maximum, `nilToZero: false` | **600s** (align GC / reaper schedule) |
-| `IdentityBridgeLookup` | Sum | 120s; filter in PromQL by `dimension_Outcome` |
+| Metric                 | Statistics                  | Period notes                                  |
+| ---------------------- | --------------------------- | --------------------------------------------- |
+| `ReaperDuration`       | Average, p99                | 120s                                          |
+| `ReaperErrors`         | Sum                         | 120s                                          |
+| `ReaperLastRun`        | Maximum, `nilToZero: false` | **600s** (align GC / reaper schedule)         |
+| `IdentityBridgeLookup` | Sum                         | 120s; filter in PromQL by `dimension_Outcome` |
 
 After zoa repo adds Access HTTP with `HandlerMode=access`, existing `HttpRequestCount` / `HttpRequestDuration` scrape automatically lists new dimension sets — no metric name change.
 
@@ -65,7 +65,7 @@ Only **ZOA boundary** clusters — dedicated name `{global.cluster_name}-zoa-bou
 ```yaml
 - type: AWS/ECS
   regions:
-    - {{ .Values.global.aws_region }}
+    - { { .Values.global.aws_region } }
   searchTags:
     - key: Component
       value: ^zoa$
@@ -109,12 +109,12 @@ Access function lives in **RC** account; MC YACE job may not see it — Access p
 
 Add (names illustrative; match existing style):
 
-| Record | Intent |
-| ------ | ------ |
-| `zoa:reaper_last_run` | `max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[10m]))` |
-| `zoa:reaper_tick_count` | `changes(zoa:reaper_last_run[30m])` — 5m schedule → expect fewer changes than reconciler |
-| `zoa:access_availability` | Same formula as `zoa:api_availability` but `dimension_HandlerMode="access"` on `aws_zoa_http_request_count_sum` |
-| `zoa:identity_bridge_miss_rate` | Optional: ratio of `Outcome=miss` to total lookups per cluster |
+| Record                          | Intent                                                                                                          |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `zoa:reaper_last_run`           | `max by (cluster) (last_over_time(aws_zoa_reaper_last_run_maximum[10m]))`                                       |
+| `zoa:reaper_tick_count`         | `changes(zoa:reaper_last_run[30m])` — 5m schedule → expect fewer changes than reconciler                        |
+| `zoa:access_availability`       | Same formula as `zoa:api_availability` but `dimension_HandlerMode="access"` on `aws_zoa_http_request_count_sum` |
+| `zoa:identity_bridge_miss_rate` | Optional: ratio of `Outcome=miss` to total lookups per cluster                                                  |
 
 Keep **no** `active_sessions` recording rule.
 
@@ -122,13 +122,13 @@ Keep **no** `active_sessions` recording rule.
 
 ## Alerts (`zoa-alerts`)
 
-| Alert | Severity | Rationale |
-| ----- | -------- | --------- |
-| `ZOAReaperStalled` | warning | Mirror `ZOAGCStalled`; threshold **1800s** (6× 5m); three-path pattern like GC |
-| `ZOAReaperErrors` | warning | Mirror `ZOAGCErrors`; `sum(aws_zoa_reaper_errors_sum) > 0` |
-| `ZOAAccessAvailabilityBelowSLO` | warning | Uses `zoa:access_availability` + traffic guard |
-| `ZOAIdentityBridgeMiss` | warning | Sustained `Outcome=miss` or miss ratio with lookup volume guard |
-| `ZOAIdentityBridgeError` | warning | Sustained `Outcome=error` (Dynamo) |
+| Alert                           | Severity | Rationale                                                                      |
+| ------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `ZOAReaperStalled`              | warning  | Mirror `ZOAGCStalled`; threshold **1800s** (6× 5m); three-path pattern like GC |
+| `ZOAReaperErrors`               | warning  | Mirror `ZOAGCErrors`; `sum(aws_zoa_reaper_errors_sum) > 0`                     |
+| `ZOAAccessAvailabilityBelowSLO` | warning  | Uses `zoa:access_availability` + traffic guard                                 |
+| `ZOAIdentityBridgeMiss`         | warning  | Sustained `Outcome=miss` or miss ratio with lookup volume guard                |
+| `ZOAIdentityBridgeError`        | warning  | Sustained `Outcome=error` (Dynamo)                                             |
 
 Extend **`ZOALambdaErrorRateHigh`** / **`ZOALambdaThrottled`** to include `*-zoa-access` where series exist.
 

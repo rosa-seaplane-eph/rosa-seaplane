@@ -254,7 +254,7 @@ spec:
           expr: |
             (zoa:lambda_error_rate > 0.05)
             and
-            (sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)"}) > 10)
+            (sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)"}) > 10)
           for: 10m
           labels:
             severity: warning
@@ -263,7 +263,7 @@ spec:
             description: >-
               ZOA Lambda functions on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
               error rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }} (>5%)
-              for 10m. Covers both API and worker Lambdas.
+              for 10m. Covers API, worker, and Access Lambdas where YACE exposes them.
             runbook: >-
               1. Check Lambda error details in CloudWatch Logs, filter by cluster and function name (api or worker).
               2. Look for OOM kills (Runtime.ExitError), init failures, or handler panics.
@@ -297,6 +297,31 @@ spec:
               5. If correlated with ZOALambdaErrorRateHigh: fix Lambda first.
               6. Alert auto-recovers when availability rises above {{ .Values.sla.zoa.apiAvailability.target }}.
 
+        # Access Lambda HTTP availability (session start/join on RC).
+        # EMF dimension_Cluster is deployment name, not MC id — alert is per
+        # Prometheus cluster label (RC Thanos series).
+        - alert: ZOAAccessAvailabilityBelowSLO
+          expr: |
+            (zoa:access_availability < {{ .Values.sla.zoa.accessAvailability.target }})
+            and
+            (sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"}) > 10)
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA Access availability below SLO
+            description: >-
+              ZOA Access on cluster {{ "{{" }} $labels.cluster {{ "}}" }} availability is
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }}
+              (target {{ .Values.sla.zoa.accessAvailability.target }}) for 15m.
+              Session plane HTTP (Function URL) is returning elevated 5xx.
+            runbook: >-
+              1. Open ZOA dashboard Access section: Session HTTP and Access deployment panels.
+              2. Check CloudWatch Logs for *-zoa-access Lambda (session start, RunTask, DynamoDB).
+              3. Common causes: DynamoDB sessions table throttling, ECS RunTask failures, boundary task definition drift.
+              4. If correlated with ZOADynamoDBThrottled: fix DynamoDB first.
+              5. Alert auto-recovers when availability rises above {{ .Values.sla.zoa.accessAvailability.target }}.
+
         # Global TA success rate below SLO. Per-action detail is in the
         # dashboard — alerts are global to avoid noise at fleet scale
         # (40 regions × N MCs × M actions = unmanageable).
@@ -326,7 +351,7 @@ spec:
         # Lambda concurrency limits hit — scaling or configuration issue.
         - alert: ZOALambdaThrottled
           expr: |
-            sum by (cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)"}) > 0
+            sum by (cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)"}) > 0
           for: 10m
           labels:
             severity: warning
@@ -400,6 +425,23 @@ spec:
               3. Worker Dynamo errors: check ZOAIdentityBridgeLookup error outcome and DynamoDB health.
               4. Until boundary-only IAM: laptop→API path does not increment this metric.
 
+        # Identity bridge Dynamo lookup failures (distinct from miss = no session row).
+        - alert: ZOAIdentityBridgeError
+          expr: |
+            sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="error"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA identity bridge lookup errors
+            description: >-
+              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} reported
+              DynamoDB lookup errors for >10m. Boundary attribution may fall back to task-id operator.
+            runbook: >-
+              1. Check worker/API Lambda logs for identity bridge Dynamo errors.
+              2. Check ZOA DynamoDB tables health and throttling (ZOADynamoDBThrottled).
+              3. Alert auto-recovers when error count stops.
+
         # Session reaper tick health (Worker route reaper, ~5m).
         - alert: ZOAReaperStalled
           expr: |
@@ -429,6 +471,22 @@ spec:
               1. Check EventBridge worker schedule includes route reaper.
               2. Check worker Lambda logs for reaper errors.
               3. Alert auto-recovers when reaper resumes ticking.
+
+        - alert: ZOAReaperErrors
+          expr: |
+            sum by (cluster) (aws_zoa_reaper_errors_sum) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: ZOA session reaper errors detected
+            description: >-
+              ZOA session reaper on cluster {{ "{{" }} $labels.cluster {{ "}}" }}
+              reported errors for >10m. Sessions may not be stopped on deadline/idle policy.
+            runbook: >-
+              1. Check worker Lambda logs for reaper errors (ECS StopTask, Dynamo session updates).
+              2. Check ECS boundary cluster health and IAM for StopTask/ListTasks.
+              3. Alert auto-recovers when reaper errors stop.
 
         # GC is encountering errors cleaning up resources.
         - alert: ZOAGCErrors

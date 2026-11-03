@@ -8,7 +8,8 @@
     "lambda",
     "dynamodb",
     "sqs",
-    "sre"
+    "sre",
+    "ecs"
   ],
   "timezone": "browser",
   "refresh": "1m",
@@ -493,7 +494,7 @@
       }
     },
     {
-      "id": 41,
+      "id": 49,
       "type": "barchart",
       "title": "Executions by Cluster",
       "description": "Total TA executions per cluster in the dashboard time range. Shows which RC/MC is busiest. Respects action filter.",
@@ -661,7 +662,7 @@
       ]
     },
     {
-      "id": 40,
+      "id": 48,
       "type": "barchart",
       "title": "Executions by Mode",
       "description": "sync (in-Lambda) vs async (K8s Job) TAs in the dashboard time range. Respects cluster and action filters.",
@@ -703,7 +704,7 @@
       ]
     },
     {
-      "id": 10,
+      "id": 9,
       "type": "row",
       "title": "Trusted Action Executions",
       "collapsed": false,
@@ -897,13 +898,83 @@
       }
     },
     {
+      "id": 67,
+      "type": "timeseries",
+      "title": "Boundary running tasks",
+      "description": "ECS cluster {cluster_id}-zoa-boundary (Component=zoa). Active boundary session tasks.",
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (cluster, dimension_ClusterName) (aws_ecs_running_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\", cluster=~\"$cluster\", tag_Component=\"zoa\", tag_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ cluster }} {{ dimension_ClusterName }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 68,
+      "type": "timeseries",
+      "title": "Boundary pending tasks",
+      "description": "Tasks waiting to start on the ZOA boundary ECS cluster.",
+      "gridPos": {
+        "x": 12,
+        "y": 37,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (cluster, dimension_ClusterName) (aws_ecs_pending_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\", cluster=~\"$cluster\", tag_Component=\"zoa\", tag_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ cluster }} {{ dimension_ClusterName }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
       "id": 20,
       "type": "row",
       "title": "HTTP API",
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 45,
         "w": 24,
         "h": 1
       }
@@ -915,7 +986,7 @@
       "description": "Function URL has no API Gateway metrics. RouteTemplate is low-cardinality (no execution UUIDs).",
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 46,
         "w": 12,
         "h": 8
       },
@@ -949,7 +1020,7 @@
       "description": "4xx includes cooldown and validation rejections (expected). 5xx means API unavailability.",
       "gridPos": {
         "x": 12,
-        "y": 38,
+        "y": 46,
         "w": 12,
         "h": 8
       },
@@ -1020,7 +1091,7 @@
       "description": "P99 latency of HTTP requests to the ZOA API Lambda Function URL. Includes dispatch overhead, not full execution time for async TAs.",
       "gridPos": {
         "x": 0,
-        "y": 46,
+        "y": 54,
         "w": 24,
         "h": 8
       },
@@ -1054,7 +1125,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 54,
+        "y": 62,
         "w": 24,
         "h": 1
       }
@@ -1066,7 +1137,7 @@
       "description": "Time taken by the reconciler tick (dispatch approved TAs, timeout stale ones, poll async jobs). Healthy is single-digit seconds.",
       "gridPos": {
         "x": 0,
-        "y": 55,
+        "y": 63,
         "w": 8,
         "h": 8
       },
@@ -1100,7 +1171,7 @@
       "description": "Phase errors during reconciler or GC ticks. Non-zero means some operations failed within the tick (e.g., DynamoDB write, Lambda invocation).",
       "gridPos": {
         "x": 8,
-        "y": 55,
+        "y": 63,
         "w": 8,
         "h": 8
       },
@@ -1139,7 +1210,7 @@
       "description": "Distinct ReconcilerLastRun values in the last 10 minutes (changes()). Reconciler fires every 60s. Expected: 3\u20134 (YACE scrapes every 120s \u2192 ~5 samples, ~4 transitions). 0 = stalled.",
       "gridPos": {
         "x": 16,
-        "y": 55,
+        "y": 63,
         "w": 4,
         "h": 8
       },
@@ -1193,7 +1264,7 @@
       "description": "Distinct GCLastRun values in the last 30 minutes (changes()). GC fires every 5min. Expected: 4\u20136 (YACE scrapes every 120s \u2192 ~15 samples, ~6 GC ticks in window). 0 = stalled.",
       "gridPos": {
         "x": 20,
-        "y": 55,
+        "y": 63,
         "w": 4,
         "h": 8
       },
@@ -1247,7 +1318,7 @@
       "description": "Ephemeral Kubernetes resources (ServiceAccounts, RBAC) cleaned up by the garbage collector. Empty is normal when no stale resources exist. Steady flow during activity means GC is healthy.",
       "gridPos": {
         "x": 0,
-        "y": 63,
+        "y": 71,
         "w": 12,
         "h": 8
       },
@@ -1281,7 +1352,7 @@
       "description": "Circuit breaker is per Lambda container, not global. Empty means healthy (no trips). A state=open event means at least one container cannot reach EKS.",
       "gridPos": {
         "x": 12,
-        "y": 63,
+        "y": 71,
         "w": 12,
         "h": 8
       },
@@ -1315,7 +1386,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 71,
+        "y": 79,
         "w": 24,
         "h": 1
       }
@@ -1327,7 +1398,7 @@
       "description": "Boundary task-role callers only. hit = Dynamo session row with taskId; miss = 403 on TA dispatch; error = Dynamo failure (TA may still run). Laptop invoker path does not appear here.",
       "gridPos": {
         "x": 0,
-        "y": 72,
+        "y": 80,
         "w": 12,
         "h": 8
       },
@@ -1361,7 +1432,7 @@
       "description": "Recording rule zoa:identity_bridge_miss_rate. Alert ZOAIdentityBridgeMissRateHigh fires above 25% with lookup volume guard.",
       "gridPos": {
         "x": 12,
-        "y": 72,
+        "y": 80,
         "w": 12,
         "h": 8
       },
@@ -1397,7 +1468,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 80,
+        "y": 88,
         "w": 24,
         "h": 1
       }
@@ -1409,7 +1480,7 @@
       "description": "Raw Lambda invocations across ZOA functions (api + worker + access). Includes retries and scheduled events.",
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 89,
         "w": 8,
         "h": 8
       },
@@ -1443,7 +1514,7 @@
       "description": "Lambda-level errors (unhandled exceptions, timeouts, OOM). Any non-zero value means requests were completely lost.",
       "gridPos": {
         "x": 8,
-        "y": 81,
+        "y": 89,
         "w": 8,
         "h": 8
       },
@@ -1493,7 +1564,7 @@
       "description": "P99 Lambda execution time (wall clock). Approaching the Lambda timeout (300s) means code deadline or cold starts need investigation.",
       "gridPos": {
         "x": 16,
-        "y": 81,
+        "y": 89,
         "w": 8,
         "h": 8
       },
@@ -1527,7 +1598,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 80,
+        "y": 97,
         "w": 24,
         "h": 1
       }
@@ -1539,7 +1610,7 @@
       "description": "Number of messages in the ZOA dead-letter queue over time. Each message represents a failed worker/reconciler Lambda invocation that exhausted retries.",
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 98,
         "w": 12,
         "h": 8
       },
@@ -1589,7 +1660,7 @@
       "description": "Age of the oldest DLQ message in seconds. Growing age means DLQ messages are not being investigated or replayed.",
       "gridPos": {
         "x": 12,
-        "y": 81,
+        "y": 98,
         "w": 12,
         "h": 8
       },
@@ -1623,7 +1694,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 89,
+        "y": 106,
         "w": 24,
         "h": 1
       }
@@ -1635,7 +1706,7 @@
       "description": "Should always be 0 with on-demand billing. Non-zero means DynamoDB is rejecting ZOA requests.",
       "gridPos": {
         "x": 0,
-        "y": 90,
+        "y": 107,
         "w": 8,
         "h": 8
       },
@@ -1685,7 +1756,7 @@
       "description": "Tail latency of successful DynamoDB requests. Healthy is single-digit ms.",
       "gridPos": {
         "x": 8,
-        "y": 90,
+        "y": 107,
         "w": 8,
         "h": 8
       },
@@ -1719,7 +1790,7 @@
       "description": "Read and write capacity consumption. Sudden spikes can indicate unexpected load or table scans.",
       "gridPos": {
         "x": 16,
-        "y": 90,
+        "y": 107,
         "w": 8,
         "h": 8
       },

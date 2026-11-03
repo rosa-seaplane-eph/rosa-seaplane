@@ -64,6 +64,9 @@ prometheus-yet-another-cloudwatch-exporter:
         AWS/SQS:
           - Component
           - Cluster
+        AWS/ECS:
+          - Component
+          - Cluster
       jobs:
         - type: AWS/Lambda
           regions:
@@ -107,6 +110,27 @@ prometheus-yet-another-cloudwatch-exporter:
               statistics: [Maximum]
               nilToZero: true
             - name: ApproximateAgeOfOldestMessage
+              statistics: [Maximum]
+              nilToZero: true
+
+        - type: AWS/ECS
+          regions:
+            - {{ .Values.global.aws_region }}
+          searchTags:
+            - key: Component
+              value: ^zoa$
+            - key: Cluster
+              value: ^{{ .Values.global.cluster_name }}$
+          dimensionNameRequirements:
+            - ClusterName
+          period: 120
+          length: 120
+          delay: 120
+          metrics:
+            - name: RunningTaskCount
+              statistics: [Average, Maximum]
+              nilToZero: true
+            - name: PendingTaskCount
               statistics: [Maximum]
               nilToZero: true
 

@@ -45,6 +45,20 @@ tests:
           - labels: 'zoa:api_availability{cluster="mc-01"}'
             value: 0.8
 
+  # Access availability: 90/100 = 0.9
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-01",dimension_HandlerMode="access",dimension_StatusClass="2xx"}'
+        values: "90x10"
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-01",dimension_HandlerMode="access",dimension_StatusClass="5xx"}'
+        values: "10x10"
+    promql_expr_test:
+      - expr: zoa:access_availability{cluster="rc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:access_availability{cluster="rc-01"}'
+            value: 0.9
+
   # Lambda error rate: combined api+worker (12/200 = 6%)
   - interval: 1m
     input_series:
@@ -308,7 +322,7 @@ tests:
               cluster: mc-05
             exp_annotations:
               summary: ZOA Lambda error rate elevated
-              description: ZOA Lambda functions on cluster mc-05 error rate is 10% (>5%) for 10m. Covers both API and worker Lambdas.
+              description: ZOA Lambda functions on cluster mc-05 error rate is 10% (>5%) for 10m. Covers API, worker, and Access Lambdas where YACE exposes them.
               runbook: "1. Check Lambda error details in CloudWatch Logs, filter by cluster and function name (api or worker). 2. Look for OOM kills (Runtime.ExitError), init failures, or handler panics. 3. If OOM: increase Lambda memory in Terraform zoa-lambda module. 4. If init panic: check recent ZOA image deployments, may need rollback. 5. If sporadic: may be transient AWS issue, monitor for self-recovery. 6. Alert auto-recovers when error rate drops below 5%."
 
   # Lambda error rate: low traffic should NOT fire
@@ -375,6 +389,37 @@ tests:
     alert_rule_test:
       - eval_time: 16m
         alertname: ZOAApiAvailabilityBelowSLO
+        exp_alerts: []
+
+  # Access availability below SLO: 80/100, >10 requests → fires
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-01",dimension_HandlerMode="access",dimension_StatusClass="2xx"}'
+        values: "80x20"
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-01",dimension_HandlerMode="access",dimension_StatusClass="5xx"}'
+        values: "20x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAAccessAvailabilityBelowSLO
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              cluster: rc-01
+            exp_annotations:
+              summary: ZOA Access availability below SLO
+              description: ZOA Access on cluster rc-01 availability is 80% (target 0.99) for 15m. Session plane HTTP (Function URL) is returning elevated 5xx.
+              runbook: "1. Open ZOA dashboard Access section: Session HTTP and Access deployment panels. 2. Check CloudWatch Logs for *-zoa-access Lambda (session start, RunTask, DynamoDB). 3. Common causes: DynamoDB sessions table throttling, ECS RunTask failures, boundary task definition drift. 4. If correlated with ZOADynamoDBThrottled: fix DynamoDB first. 5. Alert auto-recovers when availability rises above 0.99."
+
+  # Access availability healthy → does NOT fire
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-02",dimension_HandlerMode="access",dimension_StatusClass="2xx"}'
+        values: "99x20"
+      - series: 'aws_zoa_http_request_count_sum{cluster="rc-02",dimension_HandlerMode="access",dimension_StatusClass="5xx"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAAccessAvailabilityBelowSLO
         exp_alerts: []
 
   # Lambda throttled: sustained throttles for >10m → fires warning
