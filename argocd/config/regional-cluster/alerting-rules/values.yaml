@@ -16,5 +16,8 @@ sla:
     accessAvailability:
       # Access Lambda (laptop session plane) — same starting target as API
       target: 0.99
+    # Boundary bridge SLI: hit / (hit+miss+error). Skipped (e2e/laptop→API) excluded from alert.
+    identityBridgeHitRate:
+      target: 0.95
     taSuccessRate:
       target: 0.95

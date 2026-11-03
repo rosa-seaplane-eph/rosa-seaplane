@@ -110,6 +110,13 @@ spec:
             sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="miss"})
             / sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"})
 
+        # Boundary attribution SLI: share of bridge lookups that resolved operator+session.
+        # Denominator excludes Outcome=skipped (laptop/CI callers).
+        - record: zoa:identity_bridge_hit_rate
+          expr: |
+            sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="hit"})
+            / sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"})
+
     - name: zoa-alerts
       rules:
         # ──────────────────────────────────────────────────────────────
@@ -403,44 +410,28 @@ spec:
               4. Impact: stale ServiceAccounts and RBAC bindings accumulate in the MC. Not immediately dangerous but creates clutter.
               5. Alert auto-recovers when GC resumes ticking.
 
-        # Boundary identity bridge miss rate — task-shaped API callers without Dynamo session row.
-        - alert: ZOAIdentityBridgeMissRateHigh
+        # Boundary identity bridge SLI: hit_rate over hit|miss|error only.
+        # Outcome=skipped (Ginkgo/laptop→API) is graphed but not part of this alert.
+        - alert: ZOAIdentityBridgeHitRateBelowSLO
           expr: |
-            (zoa:identity_bridge_miss_rate > 0.25)
+            (zoa:identity_bridge_hit_rate < {{ .Values.sla.zoa.identityBridgeHitRate.target }})
             and
-            (sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"}) > 5)
+            (sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~"hit|miss|error"}) > 10)
           for: 15m
           labels:
             severity: warning
           annotations:
-            summary: ZOA identity bridge miss rate elevated
+            summary: ZOA identity bridge hit rate below SLO
             description: >-
-              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} missed
-              >25% of boundary task lookups for 15m (miss / (hit+miss+error)).
-              TAs still run with task-id operator until mapping is fixed; investigate
-              session taskId wiring and Dynamo health.
+              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} hit rate is
+              {{ "{{" }} $value | humanizePercentage {{ "}}" }}
+              (target {{ .Values.sla.zoa.identityBridgeHitRate.target }}) for 15m over
+              boundary lookups only (skipped/e2e excluded).
+              TAs still run but audit operator may be ECS task id instead of human.
             runbook: >-
-              1. Check Access session start / RunTask path: session rows should get taskId after boundary starts.
-              2. Compare bridge hit/miss/error in ZOA dashboard (Worker/API section).
-              3. Worker Dynamo errors: check ZOAIdentityBridgeLookup error outcome and DynamoDB health.
-              4. Until boundary-only IAM: laptop→API path does not increment this metric.
-
-        # Identity bridge Dynamo lookup failures (distinct from miss = no session row).
-        - alert: ZOAIdentityBridgeError
-          expr: |
-            sum by (cluster) (aws_zoa_identity_bridge_lookup_sum{dimension_Outcome="error"}) > 0
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: ZOA identity bridge lookup errors
-            description: >-
-              Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} reported
-              DynamoDB lookup errors for >10m. Boundary attribution may fall back to task-id operator.
-            runbook: >-
-              1. Check worker/API Lambda logs for identity bridge Dynamo errors.
-              2. Check ZOA DynamoDB tables health and throttling (ZOADynamoDBThrottled).
-              3. Alert auto-recovers when error count stops.
+              1. Grafana: Identity Bridge Lookups — all outcomes (skipped is expected for direct API/e2e).
+              2. If miss/error dominate: session taskId wiring, race at start, or Dynamo (error).
+              3. Alert clears when hit rate rises above {{ .Values.sla.zoa.identityBridgeHitRate.target }}.
 
         # Session reaper tick health (Worker route reaper, ~5m).
         - alert: ZOAReaperStalled

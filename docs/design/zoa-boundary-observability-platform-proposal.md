@@ -122,13 +122,12 @@ Keep **no** `active_sessions` recording rule.
 
 ## Alerts (`zoa-alerts`)
 
-| Alert                           | Severity | Rationale                                                                      |
-| ------------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `ZOAReaperStalled`              | warning  | Mirror `ZOAGCStalled`; threshold **1800s** (6× 5m); three-path pattern like GC |
-| `ZOAReaperErrors`               | warning  | Mirror `ZOAGCErrors`; `sum(aws_zoa_reaper_errors_sum) > 0`                     |
-| `ZOAAccessAvailabilityBelowSLO` | warning  | Uses `zoa:access_availability` + traffic guard                                 |
-| `ZOAIdentityBridgeMiss`         | warning  | Sustained `Outcome=miss` or miss ratio with lookup volume guard                |
-| `ZOAIdentityBridgeError`        | warning  | Sustained `Outcome=error` (Dynamo)                                             |
+| Alert                              | Severity | Rationale                                                                            |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `ZOAReaperStalled`                 | warning  | Mirror `ZOAGCStalled`; threshold **1800s** (6× 5m); three-path pattern like GC       |
+| `ZOAReaperErrors`                  | warning  | Mirror `ZOAGCErrors`; `sum(aws_zoa_reaper_errors_sum) > 0`                           |
+| `ZOAAccessAvailabilityBelowSLO`    | warning  | Uses `zoa:access_availability` + traffic guard                                       |
+| `ZOAIdentityBridgeHitRateBelowSLO` | warning  | `zoa:identity_bridge_hit_rate` below target; skipped excluded; boundary volume guard |
 
 Extend **`ZOALambdaErrorRateHigh`** / **`ZOALambdaThrottled`** to include `*-zoa-access` where series exist.
 

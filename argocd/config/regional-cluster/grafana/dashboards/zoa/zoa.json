@@ -1395,7 +1395,7 @@
       "id": 45,
       "type": "timeseries",
       "title": "Identity Bridge Lookups",
-      "description": "Boundary task-role callers only. hit = Dynamo session row with taskId; miss = 403 on TA dispatch; error = Dynamo failure (TA may still run). Laptop invoker path does not appear here.",
+      "description": "All ResolveIdentity outcomes. **skipped** = laptop/e2e calling API without boundary (expected today). **hit/miss/error** = boundary task role only. Alert **ZOAIdentityBridgeHitRateBelowSLO** uses hit rate over hit|miss|error only.",
       "gridPos": {
         "x": 0,
         "y": 80,
@@ -1428,8 +1428,8 @@
     {
       "id": 46,
       "type": "timeseries",
-      "title": "Identity Bridge Miss Rate",
-      "description": "Recording rule zoa:identity_bridge_miss_rate. Alert ZOAIdentityBridgeMissRateHigh fires above 25% with lookup volume guard.",
+      "title": "Boundary hit rate (excludes skipped)",
+      "description": "zoa:identity_bridge_hit_rate = hit / (hit+miss+error). Alert ZOAIdentityBridgeHitRateBelowSLO when below 95% with >10 boundary lookups. Graph skipped separately above — high skipped is normal for e2e/laptop→API.",
       "gridPos": {
         "x": 12,
         "y": 80,
@@ -1443,7 +1443,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "zoa:identity_bridge_miss_rate{cluster=~\"$cluster\"}",
+          "expr": "zoa:identity_bridge_hit_rate{cluster=~\"$cluster\"}",
           "legendFormat": "{{ cluster }}"
         }
       ],

@@ -138,10 +138,78 @@ tests:
         exp_samples:
           - labels: 'zoa:identity_bridge_miss_rate{cluster="mc-01"}'
             value: 0.25
+      - expr: zoa:identity_bridge_hit_rate{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:identity_bridge_hit_rate{cluster="mc-01"}'
+            value: 0.75
+
+  # Identity bridge hit rate with errors: 6 hit / (6+2+2) = 0.6
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="hit"}'
+        values: "6x10"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="miss"}'
+        values: "2x10"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="error"}'
+        values: "2x10"
+    promql_expr_test:
+      - expr: zoa:identity_bridge_hit_rate{cluster="mc-02"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:identity_bridge_hit_rate{cluster="mc-02"}'
+            value: 0.6
 
   # ──────────────────────────────────────────────────────────────
   # Alert tests — CRITICAL
   # ──────────────────────────────────────────────────────────────
+
+  # Identity bridge attribution degraded: 75% hit rate, boundary volume OK (skipped ignored)
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="hit"}'
+        values: "9x20"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="miss"}'
+        values: "2x20"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-02",dimension_Outcome="skipped"}'
+        values: "500x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAIdentityBridgeHitRateBelowSLO
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              cluster: mc-02
+            exp_annotations:
+              summary: ZOA identity bridge hit rate below SLO
+              description: Identity bridge on cluster mc-02 hit rate is 81.82% (target 0.95) for 15m over boundary lookups only (skipped/e2e excluded). TAs still run but audit operator may be ECS task id instead of human.
+              runbook: "1. Grafana: Identity Bridge Lookups — all outcomes (skipped is expected for direct API/e2e). 2. If miss/error dominate: session taskId wiring, race at start, or Dynamo (error). 3. Alert clears when hit rate rises above 0.95."
+
+  # High skipped, healthy hit rate → no alert
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-03",dimension_Outcome="hit"}'
+        values: "99x20"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-03",dimension_Outcome="miss"}'
+        values: "1x20"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-03",dimension_Outcome="skipped"}'
+        values: "5000x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAIdentityBridgeHitRateBelowSLO
+        exp_alerts: []
+
+  # Low boundary volume → no alert even if hit rate low
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-04",dimension_Outcome="hit"}'
+        values: "3x20"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-04",dimension_Outcome="miss"}'
+        values: "3x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAIdentityBridgeHitRateBelowSLO
+        exp_alerts: []
 
   # DLQ growing: mc-05 gains 5 messages in 30min → fires warning
   - interval: 1m
