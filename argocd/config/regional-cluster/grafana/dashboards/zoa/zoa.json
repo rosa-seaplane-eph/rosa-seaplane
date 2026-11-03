@@ -64,6 +64,21 @@
         "sort": 1
       },
       {
+        "name": "access_deployment",
+        "type": "query",
+        "label": "Access deployment",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": "label_values(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_RouteTemplate=\"GET /health\"}, dimension_Cluster)",
+        "refresh": 2,
+        "hide": 2,
+        "multi": false,
+        "includeAll": false,
+        "sort": 1
+      },
+      {
         "name": "action",
         "type": "query",
         "label": "Action",
@@ -172,7 +187,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "((sum(aws_zoa_http_request_count_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"}) - (sum(aws_zoa_http_request_count_sum{dimension_StatusClass=\"5xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})) and on() (sum(aws_zoa_http_request_count_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"}) > 0)"
+          "expr": "((sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"}) - (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"5xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"})) and on() (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"}) > 0)"
         }
       ],
       "options": {
@@ -802,9 +817,9 @@
       }
     },
     {
-      "id": 20,
+      "id": 64,
       "type": "row",
-      "title": "HTTP API",
+      "title": "Access (laptop / boundary)",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -814,10 +829,10 @@
       }
     },
     {
-      "id": 21,
+      "id": 65,
       "type": "timeseries",
-      "title": "Request Count by Route & Status",
-      "description": "Function URL has no API Gateway metrics. RouteTemplate is low-cardinality (no execution UUIDs).",
+      "title": "Session HTTP by target",
+      "description": "Access session start/join/terminate/exec-attached. dimension_Cluster is ZOA target id.",
       "gridPos": {
         "x": 0,
         "y": 29,
@@ -831,7 +846,87 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_count_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (dimension_RouteTemplate, dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_RouteTemplate=~\"POST /api/v0/sessions/(start|join/\\\\{id\\\\}|terminate/\\\\{id\\\\}|exec-attached/\\\\{id\\\\})\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ dimension_Cluster }} {{ dimension_RouteTemplate }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 66,
+      "type": "timeseries",
+      "title": "Access deployment HTTP",
+      "description": "Health, targets, session list/history. dimension_Cluster is DEPLOYMENT_NAME; visible when filtering a single MC via access_deployment variable.",
+      "gridPos": {
+        "x": 12,
+        "y": 29,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (dimension_RouteTemplate) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_Cluster=~\"$access_deployment\", cluster=~\"$cluster\"})",
+          "legendFormat": "{{ dimension_RouteTemplate }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "HTTP API",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Request Count by Route & Status",
+      "description": "Function URL has no API Gateway metrics. RouteTemplate is low-cardinality (no execution UUIDs).",
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_count_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"})",
           "legendFormat": "{{ dimension_RouteTemplate }} {{ dimension_StatusClass }}"
         }
       ],
@@ -854,7 +949,7 @@
       "description": "4xx includes cooldown and validation rejections (expected). 5xx means API unavailability.",
       "gridPos": {
         "x": 12,
-        "y": 29,
+        "y": 38,
         "w": 12,
         "h": 8
       },
@@ -865,12 +960,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass=\"5xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass=\"5xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"})",
           "legendFormat": "{{ cluster }} 5xx"
         },
         {
           "refId": "B",
-          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass=\"4xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass=\"4xx\", cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"})",
           "legendFormat": "{{ cluster }} 4xx"
         }
       ],
@@ -925,7 +1020,7 @@
       "description": "P99 latency of HTTP requests to the ZOA API Lambda Function URL. Includes dispatch overhead, not full execution time for async TAs.",
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 46,
         "w": 24,
         "h": 8
       },
@@ -936,7 +1031,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_duration_p99{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "max by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_duration_p99{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster|$access_deployment\"})",
           "legendFormat": "{{ dimension_RouteTemplate }} {{ dimension_StatusClass }}"
         }
       ],
@@ -959,7 +1054,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 45,
+        "y": 54,
         "w": 24,
         "h": 1
       }
@@ -971,7 +1066,7 @@
       "description": "Time taken by the reconciler tick (dispatch approved TAs, timeout stale ones, poll async jobs). Healthy is single-digit seconds.",
       "gridPos": {
         "x": 0,
-        "y": 46,
+        "y": 55,
         "w": 8,
         "h": 8
       },
@@ -1005,7 +1100,7 @@
       "description": "Phase errors during reconciler or GC ticks. Non-zero means some operations failed within the tick (e.g., DynamoDB write, Lambda invocation).",
       "gridPos": {
         "x": 8,
-        "y": 46,
+        "y": 55,
         "w": 8,
         "h": 8
       },
@@ -1044,7 +1139,7 @@
       "description": "Distinct ReconcilerLastRun values in the last 10 minutes (changes()). Reconciler fires every 60s. Expected: 3\u20134 (YACE scrapes every 120s \u2192 ~5 samples, ~4 transitions). 0 = stalled.",
       "gridPos": {
         "x": 16,
-        "y": 46,
+        "y": 55,
         "w": 4,
         "h": 8
       },
@@ -1098,7 +1193,7 @@
       "description": "Distinct GCLastRun values in the last 30 minutes (changes()). GC fires every 5min. Expected: 4\u20136 (YACE scrapes every 120s \u2192 ~15 samples, ~6 GC ticks in window). 0 = stalled.",
       "gridPos": {
         "x": 20,
-        "y": 46,
+        "y": 55,
         "w": 4,
         "h": 8
       },
@@ -1152,7 +1247,7 @@
       "description": "Ephemeral Kubernetes resources (ServiceAccounts, RBAC) cleaned up by the garbage collector. Empty is normal when no stale resources exist. Steady flow during activity means GC is healthy.",
       "gridPos": {
         "x": 0,
-        "y": 54,
+        "y": 63,
         "w": 12,
         "h": 8
       },
@@ -1186,7 +1281,7 @@
       "description": "Circuit breaker is per Lambda container, not global. Empty means healthy (no trips). A state=open event means at least one container cannot reach EKS.",
       "gridPos": {
         "x": 12,
-        "y": 54,
+        "y": 63,
         "w": 12,
         "h": 8
       },
@@ -1220,7 +1315,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 62,
+        "y": 71,
         "w": 24,
         "h": 1
       }
@@ -1232,7 +1327,7 @@
       "description": "Boundary task-role callers only. hit = Dynamo session row with taskId; miss = 403 on TA dispatch; error = Dynamo failure (TA may still run). Laptop invoker path does not appear here.",
       "gridPos": {
         "x": 0,
-        "y": 63,
+        "y": 72,
         "w": 12,
         "h": 8
       },
@@ -1266,7 +1361,7 @@
       "description": "Recording rule zoa:identity_bridge_miss_rate. Alert ZOAIdentityBridgeMissRateHigh fires above 25% with lookup volume guard.",
       "gridPos": {
         "x": 12,
-        "y": 63,
+        "y": 72,
         "w": 12,
         "h": 8
       },
@@ -1302,7 +1397,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 71,
+        "y": 80,
         "w": 24,
         "h": 1
       }
@@ -1314,7 +1409,7 @@
       "description": "Raw Lambda invocations across ZOA functions (api + worker + access). Includes retries and scheduled events.",
       "gridPos": {
         "x": 0,
-        "y": 72,
+        "y": 81,
         "w": 8,
         "h": 8
       },
@@ -1348,7 +1443,7 @@
       "description": "Lambda-level errors (unhandled exceptions, timeouts, OOM). Any non-zero value means requests were completely lost.",
       "gridPos": {
         "x": 8,
-        "y": 72,
+        "y": 81,
         "w": 8,
         "h": 8
       },
@@ -1398,7 +1493,7 @@
       "description": "P99 Lambda execution time (wall clock). Approaching the Lambda timeout (300s) means code deadline or cold starts need investigation.",
       "gridPos": {
         "x": 16,
-        "y": 72,
+        "y": 81,
         "w": 8,
         "h": 8
       },
@@ -1432,7 +1527,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 71,
+        "y": 80,
         "w": 24,
         "h": 1
       }
@@ -1444,7 +1539,7 @@
       "description": "Number of messages in the ZOA dead-letter queue over time. Each message represents a failed worker/reconciler Lambda invocation that exhausted retries.",
       "gridPos": {
         "x": 0,
-        "y": 72,
+        "y": 81,
         "w": 12,
         "h": 8
       },
@@ -1494,7 +1589,7 @@
       "description": "Age of the oldest DLQ message in seconds. Growing age means DLQ messages are not being investigated or replayed.",
       "gridPos": {
         "x": 12,
-        "y": 72,
+        "y": 81,
         "w": 12,
         "h": 8
       },
@@ -1528,7 +1623,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 80,
+        "y": 89,
         "w": 24,
         "h": 1
       }
@@ -1540,7 +1635,7 @@
       "description": "Should always be 0 with on-demand billing. Non-zero means DynamoDB is rejecting ZOA requests.",
       "gridPos": {
         "x": 0,
-        "y": 81,
+        "y": 90,
         "w": 8,
         "h": 8
       },
@@ -1590,7 +1685,7 @@
       "description": "Tail latency of successful DynamoDB requests. Healthy is single-digit ms.",
       "gridPos": {
         "x": 8,
-        "y": 81,
+        "y": 90,
         "w": 8,
         "h": 8
       },
@@ -1624,7 +1719,7 @@
       "description": "Read and write capacity consumption. Sudden spikes can indicate unexpected load or table scans.",
       "gridPos": {
         "x": 16,
-        "y": 81,
+        "y": 90,
         "w": 8,
         "h": 8
       },

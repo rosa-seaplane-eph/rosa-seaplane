@@ -41,11 +41,23 @@ spec:
           expr: |
             1 - (
               (
-                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_StatusClass="5xx"})
+                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api", dimension_StatusClass="5xx"})
                 or
-                (0 * group by (cluster) (aws_zoa_http_request_count_sum))
+                (0 * group by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"}))
               )
-              / sum by (cluster) (aws_zoa_http_request_count_sum)
+              / sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"})
+            )
+
+        # Access Lambda HTTP (laptop session plane). dimension_Cluster is target id or DEPLOYMENT_NAME.
+        - record: zoa:access_availability
+          expr: |
+            1 - (
+              (
+                sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access", dimension_StatusClass="5xx"})
+                or
+                (0 * group by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"}))
+              )
+              / sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"})
             )
 
         # Combined API + Worker Lambda error rate.
@@ -267,7 +279,7 @@ spec:
           expr: |
             (zoa:api_availability < {{ .Values.sla.zoa.apiAvailability.target }})
             and
-            (sum by (cluster) (aws_zoa_http_request_count_sum) > 10)
+            (sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="api"}) > 10)
           for: 15m
           labels:
             severity: warning
@@ -379,9 +391,9 @@ spec:
             summary: ZOA identity bridge miss rate elevated
             description: >-
               Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} missed
-              >25% of boundary task lookups for 15m. Boundary TAs return 403
-              (`identity_bridge_miss`) when miss rate is high; investigate session
-              taskId wiring before operators see sustained rejections.
+              >25% of boundary task lookups for 15m (miss / (hit+miss+error)).
+              TAs still run with task-id operator until mapping is fixed; investigate
+              session taskId wiring and Dynamo health.
             runbook: >-
               1. Check Access session start / RunTask path: session rows should get taskId after boundary starts.
               2. Compare bridge hit/miss/error in ZOA dashboard (Worker/API section).

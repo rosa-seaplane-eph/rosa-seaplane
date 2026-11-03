@@ -31,11 +31,17 @@ spec:
         # accounts (ephemeral), multiple clusters share one account, so we
         # filter at scrape time.
         #
+        # Keep EMF when dimension_Cluster is this EKS cluster id, any target id
+        # under the same eph prefix (mc01, regional, …), or the Access deployment
+        # name (contains the eph id, e.g. us-east-1-eph-…).
+        #
         # 2-step mark-then-drop works around RE2's lack of negative lookahead.
         # Temporary __tmp_* labels are stripped automatically before storage.
+        {{- $cluster := .Values.global.cluster_name -}}
+        {{- $ephPrefix := trimSuffix "-regional" $cluster -}}
         - action: replace
           sourceLabels: [__name__, dimension_Cluster]
-          regex: aws_zoa_.+;{{ .Values.global.cluster_name }}
+          regex: aws_zoa_.+;({{ $cluster }}|{{ $ephPrefix }}-.*|.*{{ $ephPrefix }}.*)
           targetLabel: __tmp_zoa_mine
           replacement: "y"
         - sourceLabels: [__name__, __tmp_zoa_mine]
