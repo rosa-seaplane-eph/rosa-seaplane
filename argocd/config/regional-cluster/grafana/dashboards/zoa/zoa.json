@@ -1214,9 +1214,9 @@
       }
     },
     {
-      "id": 40,
+      "id": 44,
       "type": "row",
-      "title": "Infrastructure: Lambda",
+      "title": "API Attribution (Identity Bridge)",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -1226,13 +1226,95 @@
       }
     },
     {
-      "id": 41,
+      "id": 45,
       "type": "timeseries",
-      "title": "Lambda Invocations",
-      "description": "Raw Lambda invocations across ZOA functions (api + worker). Includes retries and scheduled events.",
+      "title": "Identity Bridge Lookups",
+      "description": "Boundary task-role callers only. hit = Dynamo session row with taskId; miss = 403 on TA dispatch; error = Dynamo failure (TA may still run). Laptop invoker path does not appear here.",
       "gridPos": {
         "x": 0,
         "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (cluster, dimension_Outcome) (aws_zoa_identity_bridge_lookup_sum{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ cluster }} {{ dimension_Outcome }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 46,
+      "type": "timeseries",
+      "title": "Identity Bridge Miss Rate",
+      "description": "Recording rule zoa:identity_bridge_miss_rate. Alert ZOAIdentityBridgeMissRateHigh fires above 25% with lookup volume guard.",
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "zoa:identity_bridge_miss_rate{cluster=~\"$cluster\"}",
+          "legendFormat": "{{ cluster }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 40,
+      "type": "row",
+      "title": "Infrastructure: Lambda",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 24,
+        "h": 1
+      }
+    },
+    {
+      "id": 41,
+      "type": "timeseries",
+      "title": "Lambda Invocations",
+      "description": "Raw Lambda invocations across ZOA functions (api + worker + access). Includes retries and scheduled events.",
+      "gridPos": {
+        "x": 0,
+        "y": 72,
         "w": 8,
         "h": 8
       },
@@ -1243,7 +1325,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", cluster=~\"$cluster\"})",
+          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
           "legendFormat": "{{ cluster }} {{ dimension_FunctionName }}"
         }
       ],
@@ -1266,7 +1348,7 @@
       "description": "Lambda-level errors (unhandled exceptions, timeouts, OOM). Any non-zero value means requests were completely lost.",
       "gridPos": {
         "x": 8,
-        "y": 63,
+        "y": 72,
         "w": 8,
         "h": 8
       },
@@ -1277,7 +1359,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", cluster=~\"$cluster\"})",
+          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
           "legendFormat": "{{ cluster }} {{ dimension_FunctionName }}"
         }
       ],
@@ -1316,7 +1398,7 @@
       "description": "P99 Lambda execution time (wall clock). Approaching the Lambda timeout (300s) means code deadline or cold starts need investigation.",
       "gridPos": {
         "x": 16,
-        "y": 63,
+        "y": 72,
         "w": 8,
         "h": 8
       },

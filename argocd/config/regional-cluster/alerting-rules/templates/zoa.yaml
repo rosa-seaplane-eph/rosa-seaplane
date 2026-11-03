@@ -52,8 +52,8 @@ spec:
         # Catches pre-handler crashes that EMF misses.
         - record: zoa:lambda_error_rate
           expr: |
-            sum by (cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)"})
-            / sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)"})
+            sum by (cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)"})
+            / sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)"})
 
         # ──────────────────────────────────────────────────────────────
         # Tick health recording rules
@@ -379,8 +379,9 @@ spec:
             summary: ZOA identity bridge miss rate elevated
             description: >-
               Identity bridge on cluster {{ "{{" }} $labels.cluster {{ "}}" }} missed
-              >25% of boundary task lookups for 15m. TAs may run with task-id
-              operator attribution instead of the human SRE.
+              >25% of boundary task lookups for 15m. Boundary TAs return 403
+              (`identity_bridge_miss`) when miss rate is high; investigate session
+              taskId wiring before operators see sustained rejections.
             runbook: >-
               1. Check Access session start / RunTask path: session rows should get taskId after boundary starts.
               2. Compare bridge hit/miss/error in ZOA dashboard (Worker/API section).

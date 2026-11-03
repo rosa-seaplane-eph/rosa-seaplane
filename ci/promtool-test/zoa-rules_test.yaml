@@ -111,6 +111,20 @@ tests:
           - labels: 'zoa:gc_tick_count{cluster="mc-01"}'
             value: 2
 
+  # Identity bridge miss rate: 2 miss / (6 hit + 2 miss) = 0.25
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-01",dimension_Outcome="miss"}'
+        values: "2x10"
+      - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-01",dimension_Outcome="hit"}'
+        values: "6x10"
+    promql_expr_test:
+      - expr: zoa:identity_bridge_miss_rate{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:identity_bridge_miss_rate{cluster="mc-01"}'
+            value: 0.25
+
   # ──────────────────────────────────────────────────────────────
   # Alert tests — CRITICAL
   # ──────────────────────────────────────────────────────────────
