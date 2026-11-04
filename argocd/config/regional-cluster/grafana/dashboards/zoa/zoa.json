@@ -216,7 +216,7 @@
       "id": 71,
       "type": "stat",
       "title": "Access Availability",
-      "description": "Non-5xx / total HTTP requests to the regional Access Lambda (HandlerMode=access). Always aggregated fleet-wide for this stat — not filtered by the Cluster dropdown (Access runs on the RC; MC selection does not apply). SLO target: 99%. Shows \"No traffic\" when there is no Access HTTP volume.",
+      "description": "Non-5xx / total HTTP requests to the regional Access Lambda (HandlerMode=access). Always aggregated fleet-wide for this stat \u2014 not filtered by the Cluster dropdown (Access runs on the RC; MC selection does not apply). SLO target: 99%. Shows \"No traffic\" when there is no Access HTTP volume.",
       "gridPos": {
         "x": 6,
         "y": 1,
@@ -1354,11 +1354,11 @@
       "id": 67,
       "type": "timeseries",
       "title": "Boundary running tasks",
-      "description": "Container Insights TaskCount (Maximum) on {cluster}-zoa-boundary \u2014 peak concurrent RunTask sessions in each 120s window; quick proxy for active boundaries without DynamoDB.",
+      "description": "Container Insights TaskCount (Maximum) on {cluster}-zoa-boundary \u2014 peak concurrent RunTask sessions in each 120s window; quick proxy for active boundaries without checking in DynamoDB sessions table.",
       "gridPos": {
         "x": 0,
         "y": 70,
-        "w": 12,
+        "w": 24,
         "h": 8
       },
       "datasource": {
@@ -1369,41 +1369,6 @@
         {
           "refId": "A",
           "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
-          "legendFormat": "{{ dimension_ClusterName }}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "min": 0
-        }
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      }
-    },
-    {
-      "id": 68,
-      "type": "timeseries",
-      "title": "Boundary pending tasks",
-      "description": "Container Insights PendingTaskCount (Maximum) on {cluster}-zoa-boundary \u2014 tasks stuck in PENDING (placement, Fargate, ENI); should usually be 0.",
-      "gridPos": {
-        "x": 12,
-        "y": 70,
-        "w": 12,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_pending_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
           "legendFormat": "{{ dimension_ClusterName }}"
         }
       ],

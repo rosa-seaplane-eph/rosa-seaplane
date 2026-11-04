@@ -311,9 +311,6 @@ prometheus-yet-another-cloudwatch-exporter:
             - name: TaskCount
               statistics: [Maximum]
               nilToZero: true
-            - name: PendingTaskCount
-              statistics: [Maximum]
-              nilToZero: true
 
         - type: AWS/SQS
           regions:
