@@ -216,7 +216,7 @@
       "id": 71,
       "type": "stat",
       "title": "Access Availability",
-      "description": "Non-5xx / total HTTP requests to the Access Lambda (HandlerMode=access), aggregated across clusters matching the Cluster dropdown. Covers laptop session plane and deployment routes where EMF carries the cluster label. SLO target: 99%. Shows \"No traffic\" when filtered volume is zero.",
+      "description": "Non-5xx / total HTTP requests to the regional Access Lambda (HandlerMode=access). Always aggregated fleet-wide for this stat — not filtered by the Cluster dropdown (Access runs on the RC; MC selection does not apply). SLO target: 99%. Shows \"No traffic\" when there is no Access HTTP volume.",
       "gridPos": {
         "x": 6,
         "y": 1,
@@ -230,7 +230,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "((sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", cluster=~\"$cluster\"}) - (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", cluster=~\"$cluster\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", cluster=~\"$cluster\"})) and on() (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", cluster=~\"$cluster\"}) > 0)"
+          "expr": "((sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}) - (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"})) and on() (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}) > 0)"
         }
       ],
       "options": {
@@ -805,8 +805,8 @@
     {
       "id": 73,
       "type": "barchart",
-      "title": "Peak boundary sessions by cluster",
-      "description": "Peak concurrent boundary ECS tasks per {cluster}-zoa-boundary cluster in the dashboard time range (Container Insights TaskCount Maximum). Proxy for active operator sessions; not DynamoDB session count. Respects Cluster dropdown.",
+      "title": "Boundary sessions by cluster",
+      "description": "Max concurrent boundary ECS tasks per {cluster}-zoa-boundary cluster in the dashboard time range. Respects cluster filters.",
       "gridPos": {
         "x": 20,
         "y": 7,
@@ -1423,7 +1423,7 @@
     {
       "id": 30,
       "type": "row",
-      "title": "ZOA WORKERS",
+      "title": "ZOA Workers",
       "collapsed": false,
       "gridPos": {
         "x": 0,
