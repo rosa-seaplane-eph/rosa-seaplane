@@ -51,6 +51,8 @@ spec:
             {{- if .Values.platformApi.app.args.defaultClusterExpiration }}
             - --default-cluster-expiration={{ .Values.platformApi.app.args.defaultClusterExpiration }}
             {{- end }}
+            - {{ printf "--regional-workload-issuer-url=%s" (required "platformApi.app.args.regionalWorkloadIssuerURL is required" .Values.platformApi.app.args.regionalWorkloadIssuerURL) | quote }}
+            - {{ printf "--regional-workload-subject=system:serviceaccount:%s:%s" .Values.platformApi.namespace .Values.platformApi.serviceAccount.name | quote }}
           env:
             - name: AWS_REGION
               value: {{ .Values.global.aws_region | quote }}
@@ -84,6 +86,9 @@ spec:
               mountPath: /etc/platform-api/rate-limits
               readOnly: true
             {{- end }}
+            - name: customer-access-identity
+              mountPath: /var/run/seaplane/customer-access
+              readOnly: true
           ports:
             - name: api
               containerPort: {{ .Values.platformApi.app.args.apiPort }}
@@ -127,3 +132,11 @@ spec:
           configMap:
             name: rate-limits
         {{- end }}
+        - name: customer-access-identity
+          projected:
+            defaultMode: 0444
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token

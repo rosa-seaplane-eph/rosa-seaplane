@@ -22,6 +22,11 @@ output "cluster_version" {
   value       = aws_eks_cluster.main.version
 }
 
+output "service_account_issuer_url" {
+  description = "OIDC issuer URL for EKS service account tokens"
+  value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
 output "cluster_certificate_authority_data" {
   description = "Base64 encoded certificate data for kubectl"
   value       = aws_eks_cluster.main.certificate_authority[0].data

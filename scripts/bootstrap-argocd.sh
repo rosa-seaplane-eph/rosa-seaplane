@@ -73,6 +73,11 @@ if [[ "$CLUSTER_TYPE" == "regional-cluster" ]]; then
     LOKI_QUERY_FRONTEND_TARGET_GROUP_ARN=$(echo "$OUTPUTS" | jq -r '.loki_query_frontend_target_group_arn.value // ""')
     OIDC_BUCKET_NAME=$(echo "$OUTPUTS" | jq -r '.oidc_bucket_name.value // ""')
     OIDC_CLOUDFRONT_DOMAIN=$(echo "$OUTPUTS" | jq -r '.oidc_cloudfront_domain.value // ""')
+    REGIONAL_WORKLOAD_ISSUER_URL=$(echo "$OUTPUTS" | jq -r '.regional_workload_issuer_url.value // ""')
+    if [[ -z "$REGIONAL_WORKLOAD_ISSUER_URL" ]]; then
+        echo "ERROR: regional_workload_issuer_url Terraform output is empty for regional cluster" >&2
+        exit 1
+    fi
     SRE_GRAFANA_TARGET_GROUP_ARN=$(echo "$OUTPUTS" | jq -r '.sre_grafana_target_group_arn.value // ""')
     SRE_ARGOCD_TARGET_GROUP_ARN=$(echo "$OUTPUTS" | jq -r '.sre_argocd_target_group_arn.value // ""')
     SRE_PROMETHEUS_TARGET_GROUP_ARN=$(echo "$OUTPUTS" | jq -r '.sre_prometheus_target_group_arn.value // ""')
@@ -95,6 +100,7 @@ else
     LOKI_QUERY_FRONTEND_TARGET_GROUP_ARN=""
     OIDC_BUCKET_NAME=""
     OIDC_CLOUDFRONT_DOMAIN=""
+    REGIONAL_WORKLOAD_ISSUER_URL=""
     SRE_GRAFANA_TARGET_GROUP_ARN=""
     SRE_ARGOCD_TARGET_GROUP_ARN=""
     SRE_PROMETHEUS_TARGET_GROUP_ARN=""
@@ -128,6 +134,7 @@ OVERRIDES_JSON=$(jq -nc \
   --arg oidc_key_reader_role_arn "$OIDC_KEY_READER_ROLE_ARN" \
   --arg oidc_bucket_name "$OIDC_BUCKET_NAME" \
   --arg oidc_cloudfront_domain "$OIDC_CLOUDFRONT_DOMAIN" \
+  --arg regional_workload_issuer_url "$REGIONAL_WORKLOAD_ISSUER_URL" \
   --arg sre_grafana_target_group_arn "$SRE_GRAFANA_TARGET_GROUP_ARN" \
   --arg sre_argocd_target_group_arn "$SRE_ARGOCD_TARGET_GROUP_ARN" \
   --arg sre_prometheus_target_group_arn "$SRE_PROMETHEUS_TARGET_GROUP_ARN" \
@@ -158,6 +165,7 @@ OVERRIDES_JSON=$(jq -nc \
         {name: "OIDC_KEY_READER_ROLE_ARN", value: $oidc_key_reader_role_arn},
         {name: "OIDC_BUCKET_NAME", value: $oidc_bucket_name},
         {name: "OIDC_CLOUDFRONT_DOMAIN", value: $oidc_cloudfront_domain},
+        {name: "REGIONAL_WORKLOAD_ISSUER_URL", value: $regional_workload_issuer_url},
         {name: "SRE_GRAFANA_TARGET_GROUP_ARN", value: $sre_grafana_target_group_arn},
         {name: "SRE_ARGOCD_TARGET_GROUP_ARN", value: $sre_argocd_target_group_arn},
         {name: "SRE_PROMETHEUS_TARGET_GROUP_ARN", value: $sre_prometheus_target_group_arn},
