@@ -89,7 +89,7 @@
     {
       "id": 1,
       "type": "row",
-      "title": "SLO Overview",
+      "title": "ZOA SLO Overview",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -583,7 +583,7 @@
     {
       "id": 10,
       "type": "row",
-      "title": "Activity Overview",
+      "title": "ZOA Activity Overview",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -847,7 +847,7 @@
     {
       "id": 9,
       "type": "row",
-      "title": "Trusted Action Executions",
+      "title": "ZOA Trusted Action Executions",
       "collapsed": false,
       "gridPos": {
         "x": 0,
