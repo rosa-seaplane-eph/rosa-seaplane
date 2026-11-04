@@ -977,7 +977,7 @@
       "id": 67,
       "type": "timeseries",
       "title": "Boundary running tasks",
-      "description": "ECS/Container Insights TaskCount on {cluster_id}-zoa-boundary (RunTask sessions; no ECS service pending queue).",
+      "description": "Container Insights TaskCount (Maximum) on {cluster}-zoa-boundary — peak concurrent RunTask sessions in each 120s window; quick proxy for active boundaries without DynamoDB.",
       "gridPos": {
         "x": 0,
         "y": 45,
@@ -992,7 +992,7 @@
         {
           "refId": "A",
           "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
-          "legendFormat": "{{ dimension_ClusterName }} max"
+          "legendFormat": "{{ dimension_ClusterName }}"
         }
       ],
       "fieldConfig": {
@@ -1011,8 +1011,8 @@
     {
       "id": 68,
       "type": "timeseries",
-      "title": "Boundary task count (avg)",
-      "description": "Container Insights TaskCount average over the scrape window. Complements the max panel for bursty session load.",
+      "title": "Boundary pending tasks",
+      "description": "Container Insights PendingTaskCount (Maximum) on {cluster}-zoa-boundary — tasks stuck in PENDING (placement, Fargate, ENI); should usually be 0.",
       "gridPos": {
         "x": 12,
         "y": 45,
@@ -1026,8 +1026,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_task_count_average{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
-          "legendFormat": "{{ dimension_ClusterName }} avg"
+          "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_pending_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
+          "legendFormat": "{{ dimension_ClusterName }}"
         }
       ],
       "fieldConfig": {

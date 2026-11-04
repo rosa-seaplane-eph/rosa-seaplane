@@ -128,7 +128,10 @@ prometheus-yet-another-cloudwatch-exporter:
           delay: 120
           metrics:
             - name: TaskCount
-              statistics: [Maximum, Average]
+              statistics: [Maximum]
+              nilToZero: true
+            - name: PendingTaskCount
+              statistics: [Maximum]
               nilToZero: true
 
     customNamespace:
