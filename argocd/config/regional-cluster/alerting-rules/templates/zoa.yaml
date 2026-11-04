@@ -60,13 +60,30 @@ spec:
               / sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode="access"})
             )
 
-        # Combined API + Worker Lambda error rate.
-        # Catches pre-handler crashes that EMF misses.
+        # Combined ZOA Lambda error rate per VPC cluster (api/worker tag_Cluster)
+        # plus Access Lambda (regional, no tag_Cluster). Matches Grafana SLO stat:
+        # vpc errors/inv filtered by tag_Cluster; Access always included in the ratio.
         - record: zoa:lambda_error_rate
           expr: |
             label_replace(
-              sum by (tag_Cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
-              / sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}),
+              (
+                sum by (tag_Cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                + (
+                  sum(aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-access"})
+                  or
+                  (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                )
+              )
+              /
+              clamp_min(
+                sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                + (
+                  sum(aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-access"})
+                  or
+                  (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                ),
+                1
+              ),
               "cluster", "$1", "tag_Cluster", "(.+)"
             )
 
@@ -257,17 +274,25 @@ spec:
               4. Common cause: burst of TA executions exceeding provisioned capacity.
               5. Alert auto-recovers when throttling stops.
 
-        # Combined API + Worker Lambda error rate. Catches pre-handler
-        # crashes (OOM, init panic) that EMF metrics miss.
-        # Traffic guard: >10 invocations prevents single-failure noise.
+        # Combined ZOA Lambda error rate (api/worker + Access). Traffic guard
+        # matches recording rule denominator (vpc inv + Access inv).
         - alert: ZOALambdaErrorRateHigh
           expr: |
             (zoa:lambda_error_rate > 0.05)
-            and
+            and on (cluster)
             (
-              sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
-              + sum(aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-access"})
-            ) > 10
+              label_replace(
+                (
+                  sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+                  + (
+                    sum(aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-access"})
+                    or
+                    (0 * sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}))
+                  )
+                ),
+                "cluster", "$1", "tag_Cluster", "(.+)"
+              ) > 10
+            )
           for: 10m
           labels:
             severity: warning
@@ -364,7 +389,10 @@ spec:
         # Lambda concurrency limits hit — scaling or configuration issue.
         - alert: ZOALambdaThrottled
           expr: |
-            sum by (tag_Cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}) > 0
+            label_replace(
+              sum by (tag_Cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}) > 0,
+              "cluster", "$1", "tag_Cluster", "(.+)"
+            )
           for: 10m
           labels:
             severity: warning

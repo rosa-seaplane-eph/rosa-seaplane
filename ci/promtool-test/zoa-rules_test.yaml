@@ -59,22 +59,22 @@ tests:
           - labels: 'zoa:access_availability{cluster="rc-01"}'
             value: 0.9
 
-  # Lambda error rate: combined api+worker (12/200 = 6%)
+  # Lambda error rate: api+worker per tag_Cluster plus Access in every ratio (12+0)/(200+0)=6%
   - interval: 1m
     input_series:
-      - series: 'aws_lambda_errors_sum{cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
+      - series: 'aws_lambda_errors_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
         values: "2x10"
-      - series: 'aws_lambda_errors_sum{cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
+      - series: 'aws_lambda_errors_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
         values: "10x10"
-      - series: 'aws_lambda_invocations_sum{cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
+      - series: 'aws_lambda_invocations_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
         values: "100x10"
-      - series: 'aws_lambda_invocations_sum{cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
+      - series: 'aws_lambda_invocations_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
         values: "100x10"
     promql_expr_test:
       - expr: zoa:lambda_error_rate{cluster="mc-01"}
         eval_time: 5m
         exp_samples:
-          - labels: 'zoa:lambda_error_rate{cluster="mc-01"}'
+          - labels: 'zoa:lambda_error_rate{cluster="mc-01",tag_Cluster="mc-01"}'
             value: 0.06
 
   # Reconciler last-run recording rule (gap-filled from EMF gauge)
@@ -373,13 +373,13 @@ tests:
   # Lambda error rate: 10% with >10 invocations → fires warning
   - interval: 1m
     input_series:
-      - series: 'aws_lambda_errors_sum{cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
+      - series: 'aws_lambda_errors_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
         values: "5x20"
-      - series: 'aws_lambda_errors_sum{cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-worker"}'
+      - series: 'aws_lambda_errors_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-worker"}'
         values: "5x20"
-      - series: 'aws_lambda_invocations_sum{cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
+      - series: 'aws_lambda_invocations_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
         values: "50x20"
-      - series: 'aws_lambda_invocations_sum{cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-worker"}'
+      - series: 'aws_lambda_invocations_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-worker"}'
         values: "50x20"
     alert_rule_test:
       - eval_time: 11m
@@ -388,6 +388,7 @@ tests:
           - exp_labels:
               severity: warning
               cluster: mc-05
+              tag_Cluster: mc-05
             exp_annotations:
               summary: ZOA Lambda error rate elevated
               description: ZOA Lambda functions on cluster mc-05 error rate is 10% (>5%) for 10m. Covers API, worker, and Access Lambdas where YACE exposes them.
@@ -396,9 +397,9 @@ tests:
   # Lambda error rate: low traffic should NOT fire
   - interval: 1m
     input_series:
-      - series: 'aws_lambda_errors_sum{cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
+      - series: 'aws_lambda_errors_sum{cluster="mc-06",tag_Cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
         values: "2x20"
-      - series: 'aws_lambda_invocations_sum{cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
+      - series: 'aws_lambda_invocations_sum{cluster="mc-06",tag_Cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
         values: "3x20"
     alert_rule_test:
       - eval_time: 11m
@@ -493,7 +494,7 @@ tests:
   # Lambda throttled: sustained throttles for >10m → fires warning
   - interval: 1m
     input_series:
-      - series: 'aws_lambda_throttles_sum{cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
+      - series: 'aws_lambda_throttles_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
         values: "1x20"
     alert_rule_test:
       - eval_time: 11m
@@ -502,6 +503,7 @@ tests:
           - exp_labels:
               severity: warning
               cluster: mc-05
+              tag_Cluster: mc-05
             exp_annotations:
               summary: ZOA Lambda functions throttled
               description: ZOA Lambda functions on cluster mc-05 are being throttled. Check reserved concurrency limits.
