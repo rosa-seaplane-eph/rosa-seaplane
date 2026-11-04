@@ -18,6 +18,11 @@ output "cluster_endpoint" {
   value       = module.regional_cluster.cluster_endpoint
 }
 
+output "regional_workload_issuer_url" {
+  description = "OIDC issuer URL for regional EKS service account tokens"
+  value       = module.regional_cluster.service_account_issuer_url
+}
+
 output "cluster_certificate_authority_data" {
   description = "Base64 encoded certificate data for kubectl"
   value       = module.regional_cluster.cluster_certificate_authority_data

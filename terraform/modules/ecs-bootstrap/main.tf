@@ -206,6 +206,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
               oidc_key_reader_role_arn: "$OIDC_KEY_READER_ROLE_ARN"
               oidc_bucket_name: "$OIDC_BUCKET_NAME"
               oidc_cloudfront_domain: "$OIDC_CLOUDFRONT_DOMAIN"
+              regional_workload_issuer_url: "$REGIONAL_WORKLOAD_ISSUER_URL"
               sre_grafana_target_group_arn: "$SRE_GRAFANA_TARGET_GROUP_ARN"
               sre_argocd_target_group_arn: "$SRE_ARGOCD_TARGET_GROUP_ARN"
               sre_prometheus_target_group_arn: "$SRE_PROMETHEUS_TARGET_GROUP_ARN"

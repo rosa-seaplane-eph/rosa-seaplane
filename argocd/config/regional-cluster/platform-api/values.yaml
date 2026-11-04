@@ -29,6 +29,7 @@ platformApi:
       logLevel: info
       logFormat: json
       oidcIssuerBaseURL: ""
+      regionalWorkloadIssuerURL: ""
       # Auto-delete clusters this long after creation when the caller does not
       # supply an explicit spec.expirationTimestamp. Go duration (e.g. "24h").
       # Empty = flag omitted = no default expiration (disabled).

@@ -75,6 +75,11 @@ regional_cluster:
 
 applications:
   regional-cluster:
+    platformApi:
+      app:
+        image:
+          repository: quay.io/willkutler/rosa-hyperfleet-api
+          tag: dev-61c5425
     seaplane:
       oidcS3Bucket: "hypershift-{{ eph_prefix }}-regional-oidc-{{ account_id }}"
 
