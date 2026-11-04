@@ -230,7 +230,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", cluster=~\"$cluster\"}) / clamp_min(sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", cluster=~\"$cluster\"}), 1) or vector(0)"
+          "expr": "(sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_errors_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})) / clamp_min((sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_invocations_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})), 1) or vector(0)"
         }
       ],
       "options": {
@@ -977,7 +977,7 @@
       "id": 67,
       "type": "timeseries",
       "title": "Boundary running tasks",
-      "description": "ECS cluster {cluster_id}-zoa-boundary (Component=zoa). Active boundary session tasks.",
+      "description": "ECS/Container Insights TaskCount on {cluster_id}-zoa-boundary (RunTask sessions; no ECS service pending queue).",
       "gridPos": {
         "x": 0,
         "y": 45,
@@ -991,8 +991,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (cluster, dimension_ClusterName) (aws_ecs_running_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\", cluster=~\"$cluster\", tag_Component=\"zoa\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "{{ cluster }} {{ dimension_ClusterName }}"
+          "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
+          "legendFormat": "{{ dimension_ClusterName }} max"
         }
       ],
       "fieldConfig": {
@@ -1011,8 +1011,8 @@
     {
       "id": 68,
       "type": "timeseries",
-      "title": "Boundary pending tasks",
-      "description": "Tasks waiting to start on the ZOA boundary ECS cluster.",
+      "title": "Boundary task count (avg)",
+      "description": "Container Insights TaskCount average over the scrape window. Complements the max panel for bursty session load.",
       "gridPos": {
         "x": 12,
         "y": 45,
@@ -1026,8 +1026,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (cluster, dimension_ClusterName) (aws_ecs_pending_task_count_maximum{dimension_ClusterName=~\"$cluster-zoa-boundary\", cluster=~\"$cluster\", tag_Component=\"zoa\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "{{ cluster }} {{ dimension_ClusterName }}"
+          "expr": "max by (dimension_ClusterName) (aws_ecs_containerinsights_task_count_average{dimension_ClusterName=~\"$cluster-zoa-boundary\"})",
+          "legendFormat": "{{ dimension_ClusterName }} avg"
         }
       ],
       "fieldConfig": {
@@ -1631,8 +1631,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
-          "legendFormat": "{{ cluster }} {{ dimension_FunctionName }}"
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
+          "legendFormat": "vpc {{ dimension_FunctionName }}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})",
+          "legendFormat": "access {{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {
@@ -1665,8 +1670,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (cluster, dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
-          "legendFormat": "{{ cluster }} {{ dimension_FunctionName }}"
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
+          "legendFormat": "vpc {{ dimension_FunctionName }}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})",
+          "legendFormat": "access {{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {
@@ -1715,8 +1725,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg by (cluster, dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker)\", cluster=~\"$cluster\"})",
-          "legendFormat": "{{ cluster }} {{ dimension_FunctionName }}"
+          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
+          "legendFormat": "vpc {{ dimension_FunctionName }}"
+        },
+        {
+          "refId": "B",
+          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\"$cluster-zoa-access\"})",
+          "legendFormat": "access {{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {

@@ -64,7 +64,7 @@ prometheus-yet-another-cloudwatch-exporter:
         AWS/SQS:
           - Component
           - Cluster
-        AWS/ECS:
+        ECS/ContainerInsights:
           - Component
           - Cluster
       jobs:
@@ -113,7 +113,7 @@ prometheus-yet-another-cloudwatch-exporter:
               statistics: [Maximum]
               nilToZero: true
 
-        - type: AWS/ECS
+        - type: ECS/ContainerInsights
           regions:
             - {{ .Values.global.aws_region }}
           searchTags:
@@ -127,15 +127,11 @@ prometheus-yet-another-cloudwatch-exporter:
           length: 120
           delay: 120
           metrics:
-            - name: RunningTaskCount
-              statistics: [Average, Maximum]
-              nilToZero: true
-            - name: PendingTaskCount
-              statistics: [Maximum]
+            - name: TaskCount
+              statistics: [Maximum, Average]
               nilToZero: true
 
     customNamespace:
-      # Job name becomes the Prometheus metric prefix (zoa_execution_count_sum, etc.).
       - name: zoa
         namespace: ZOA
         regions:
