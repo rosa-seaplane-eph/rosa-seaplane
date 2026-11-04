@@ -125,7 +125,7 @@ tests:
           - labels: 'zoa:gc_tick_count{cluster="mc-01"}'
             value: 2
 
-  # Identity bridge miss rate: 2 miss / (6 hit + 2 miss) = 0.25
+  # Identity bridge hit rate: 6 hit / (6 hit + 2 miss) = 0.75
   - interval: 1m
     input_series:
       - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-01",dimension_Outcome="miss"}'
@@ -133,11 +133,6 @@ tests:
       - series: 'aws_zoa_identity_bridge_lookup_sum{cluster="mc-01",dimension_Outcome="hit"}'
         values: "6x10"
     promql_expr_test:
-      - expr: zoa:identity_bridge_miss_rate{cluster="mc-01"}
-        eval_time: 5m
-        exp_samples:
-          - labels: 'zoa:identity_bridge_miss_rate{cluster="mc-01"}'
-            value: 0.25
       - expr: zoa:identity_bridge_hit_rate{cluster="mc-01"}
         eval_time: 5m
         exp_samples:
@@ -159,6 +154,30 @@ tests:
         exp_samples:
           - labels: 'zoa:identity_bridge_hit_rate{cluster="mc-02"}'
             value: 0.6
+
+  # Reaper last-run recording rule (gap-filled from EMF gauge)
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_last_run_maximum{cluster="mc-01"}'
+        values: "1700000300x10"
+    promql_expr_test:
+      - expr: zoa:reaper_last_run{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:reaper_last_run{cluster="mc-01"}'
+            value: 1700000300
+
+  # Reaper tick count: step changes every 10m → 2 changes in 30m window
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_last_run_maximum{cluster="mc-01"}'
+        values: "1000x10 2000x10 3000x10 4000x10"
+    promql_expr_test:
+      - expr: zoa:reaper_tick_count{cluster="mc-01"}
+        eval_time: 30m
+        exp_samples:
+          - labels: 'zoa:reaper_tick_count{cluster="mc-01"}'
+            value: 2
 
   # ──────────────────────────────────────────────────────────────
   # Alert tests — CRITICAL
@@ -183,7 +202,7 @@ tests:
             exp_annotations:
               summary: ZOA identity bridge hit rate below SLO
               description: Identity bridge on cluster mc-02 hit rate is 81.82% (target 0.95) for 15m over boundary lookups only (skipped/e2e excluded). TAs still run but audit operator may be ECS task id instead of human.
-              runbook: "1. Grafana: Identity Bridge Lookups — all outcomes (skipped is expected for direct API/e2e). 2. If miss/error dominate: session taskId wiring, race at start, or Dynamo (error). 3. Alert clears when hit rate rises above 0.95."
+              runbook: "1. Grafana → ZOA HTTP API → API Identity Bridge lookups (all outcomes). 2. If miss/error dominate: session taskId wiring, race at start, or DynamoDB (error outcome). 3. Alert clears when hit rate rises above 0.95."
 
   # High skipped, healthy hit rate → no alert
   - interval: 1m
@@ -256,7 +275,7 @@ tests:
             exp_annotations:
               summary: ZOA reconciler has stopped ticking
               description: ZOA reconciler on cluster mc-05 has not ticked in >10m (expected every 60s). Async TA results will not be recorded. Check EventBridge schedule and worker Lambda health.
-              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: look for circuit breaker state changes in ZOA dashboard Worker Pipeline section. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
+              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: ZOA Workers → Circuit Breaker State Changes. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
 
   # Reconciler stalled: mc-05 heartbeats stop (gaps via _), mc-01 keeps ticking.
   # In production, YACE reports NaN or nothing when Lambda stops emitting.
@@ -283,7 +302,7 @@ tests:
             exp_annotations:
               summary: ZOA reconciler has stopped ticking
               description: ZOA reconciler on cluster mc-05 has not ticked in >10m (expected every 60s). Async TA results will not be recorded. Check EventBridge schedule and worker Lambda health.
-              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: look for circuit breaker state changes in ZOA dashboard Worker Pipeline section. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
+              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: ZOA Workers → Circuit Breaker State Changes. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
 
   # Reconciler stalled: mc-05 series vanishes, mc-01 keeps ticking
   # global absent() would miss this; per-cluster unless catches it
@@ -303,7 +322,7 @@ tests:
             exp_annotations:
               summary: ZOA reconciler has stopped ticking
               description: ZOA reconciler on cluster mc-05 has not ticked in >10m (expected every 60s). Async TA results will not be recorded. Check EventBridge schedule and worker Lambda health.
-              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: look for circuit breaker state changes in ZOA dashboard Worker Pipeline section. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
+              runbook: "1. Check EventBridge schedule: AWS Console, EventBridge, Rules, filter by cluster ID, verify 1-minute rate schedule is enabled. 2. Check worker Lambda health: CloudWatch, Lambda, filter by cluster, look for invocation errors or throttling. 3. Check if Lambda can reach EKS: ZOA Workers → Circuit Breaker State Changes. 4. If EventBridge schedule is missing, re-run the ZOA Terraform module. 5. Alert auto-recovers when reconciler resumes ticking."
 
   # Reconciler healthy: both clusters ticking → no alert
   - interval: 1m
@@ -352,7 +371,7 @@ tests:
             exp_annotations:
               summary: ZOA executions almost completely failing
               description: ZOA on cluster mc-05 global TA success rate is 0% (<10%) for 15m. Likely a dependency failure (EKS, S3, STS). Check dashboard for per-action breakdown.
-              runbook: "1. Open ZOA dashboard, check Activity Overview for which statuses dominate. 2. Check Executions by Action and Status panel to identify if all or specific actions are failing. 3. If all kube-api scope TAs fail: EKS is likely unreachable. Check circuit breaker panel and EKS cluster health. 4. If all aws-api scope TAs fail: STS AssumeRole is likely failing. Check IAM roles and STS regional endpoint health. 5. If only async TAs fail: check K8s Job creation and runner image availability. 6. If only a specific action fails: check that action RBAC and dependencies. 7. Alert auto-recovers when success rate rises above 10%."
+              runbook: "1. Open ZOA dashboard → ZOA Activity Overview and ZOA Trusted Action Executions. 2. Check Executions by Action & Status for which actions are failing. 3. If all kube-api scope TAs fail: EKS is likely unreachable. Check circuit breaker (ZOA Workers) and EKS health. 4. If all aws-api scope TAs fail: STS AssumeRole is likely failing. Check IAM roles and STS regional endpoint health. 5. If only async TAs fail: check K8s Job creation and runner image availability. 6. If only a specific action fails: check that action RBAC and dependencies. 7. Alert auto-recovers when success rate rises above 10%."
 
   # Total failure: low traffic (<10) should NOT fire even at 0%
   - interval: 1m
@@ -427,7 +446,7 @@ tests:
             exp_annotations:
               summary: ZOA TA success rate below SLO
               description: ZOA on cluster mc-01 global TA success rate is 10% (target 0.95) for 15m. Check dashboard for per-action breakdown.
-              runbook: "1. Open ZOA dashboard Executions by Action and Status panel to identify which actions are failing. 2. Check Activity Overview By Scope to see if kube-api or aws-api is affected. 3. If a single action is failing: check that action RBAC, timeout, and target resource availability. 4. If many actions fail: likely a shared dependency issue, see ZOAExecutionsTotalFailure runbook. 5. Alert auto-recovers when success rate rises above 0.95."
+              runbook: "1. Open ZOA dashboard → ZOA Trusted Action Executions (Executions by Action & Status). 2. Check ZOA Activity Overview by Scope (kube-api vs aws-api). 3. If a single action is failing: check that action RBAC, timeout, and target resource availability. 4. If many actions fail: likely a shared dependency issue, see ZOAExecutionsTotalFailure runbook. 5. Alert auto-recovers when success rate rises above 0.95."
 
   # API availability below SLO: 80/100 = 0.8 (< 0.99 target), >10 requests → fires
   - interval: 1m
@@ -446,7 +465,7 @@ tests:
             exp_annotations:
               summary: ZOA API availability below SLO
               description: ZOA API on cluster mc-01 availability is 80% (target 0.99) for 15m.
-              runbook: "1. Check ZOA dashboard HTTP API section, 5xx vs 4xx by Cluster panel. 2. Check Request Count by Route panel for which routes are returning 5xx. 3. Common causes: DynamoDB issues (check throttling), Lambda memory pressure, code bugs in request handling. 4. If correlated with ZOADynamoDBThrottled: fix DynamoDB first. 5. If correlated with ZOALambdaErrorRateHigh: fix Lambda first. 6. Alert auto-recovers when availability rises above 0.99."
+              runbook: "1. Check ZOA dashboard → ZOA HTTP API (API 5xx vs 4xx by Cluster, API Request Count by Route & Status). 2. Common causes: DynamoDB issues (check throttling), Lambda memory pressure, code bugs in request handling. 3. If correlated with ZOADynamoDBThrottled: fix DynamoDB first. 4. If correlated with ZOALambdaErrorRateHigh: fix Lambda first. 5. Alert auto-recovers when availability rises above 0.99."
 
   # API availability healthy → does NOT fire
   - interval: 1m
@@ -477,7 +496,7 @@ tests:
             exp_annotations:
               summary: ZOA Access availability below SLO
               description: ZOA Access on cluster rc-01 availability is 80% (target 0.99) for 15m. Session plane HTTP (Function URL) is returning elevated 5xx.
-              runbook: "1. Open ZOA dashboard Access section: Session HTTP and Access deployment panels. 2. Check CloudWatch Logs for *-zoa-access Lambda (session start, RunTask, DynamoDB). 3. Common causes: DynamoDB sessions table throttling, ECS RunTask failures, boundary task definition drift. 4. If correlated with ZOADynamoDBThrottled: fix DynamoDB first. 5. Alert auto-recovers when availability rises above 0.99."
+              runbook: "1. Open ZOA dashboard → ZOA Access & Boundary sessions HTTP API (Access HTTP panels). 2. Check Boundary running tasks (ECS TaskCount) if session start succeeds but boundary never becomes ready. 3. Check CloudWatch Logs for *-zoa-access Lambda (session start, RunTask, DynamoDB). 4. Common causes: DynamoDB sessions table throttling, ECS RunTask failures, boundary task definition drift. 5. If correlated with ZOADynamoDBThrottled: fix DynamoDB first. 6. Alert auto-recovers when availability rises above 0.99."
 
   # Access availability healthy → does NOT fire
   - interval: 1m
@@ -613,3 +632,47 @@ tests:
               summary: ZOA EKS circuit breaker flapping
               description: ZOA circuit breaker on cluster mc-05 has opened >3 times in 30min. At least one Lambda container is experiencing sustained EKS API connectivity issues.
               runbook: "1. Circuit breaker is per Lambda container, not global. Some containers may work fine while others cannot reach EKS. 2. Check EKS cluster health: kubectl get nodes, check API server logs. 3. Check VPC connectivity: Lambda ENIs, security groups, NACLs. 4. Check if EKS API server is overloaded: look for 429/503 responses. 5. If correlated with ZOAExecutionsTotalFailure: EKS is likely the root cause. 6. Lambda container rotation (cold starts) naturally recovers individual containers. Alert auto-recovers when EKS becomes reachable."
+
+  # Reaper stalled: last_run frozen at 0, time()-0 > 1800 for 10m → fires warning
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_last_run_maximum{cluster="mc-05"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 52m
+        alertname: ZOAReaperStalled
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              cluster: mc-05
+            exp_annotations:
+              summary: ZOA session reaper has stopped ticking
+              description: ZOA reaper on cluster mc-05 has not ticked in >30m (expected every 5min). Boundary sessions may exceed deadline/idle policy.
+              runbook: "1. Check EventBridge worker schedule includes route reaper (~5m). 2. ZOA Workers → Reaper Tick Health and Worker tick errors; check worker Lambda logs. 3. ZOA Access & Boundary → Boundary running tasks if sessions pile up without reaper stops. 4. Alert auto-recovers when reaper resumes ticking."
+
+  # Reaper healthy: ticking → no alert
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_last_run_maximum{cluster="mc-01"}'
+        values: "1000x5 2000x5 3000x5 4000x5 5000x5 6000x5 7000x5 8000x5 9000x5 10000x5 11000x5 12000x5 13000x5 14000x5"
+    alert_rule_test:
+      - eval_time: 66m
+        alertname: ZOAReaperStalled
+        exp_alerts: []
+
+  # Reaper errors: sustained errors for >10m → fires warning
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_errors_sum{cluster="mc-05"}'
+        values: "1x20"
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ZOAReaperErrors
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              cluster: mc-05
+            exp_annotations:
+              summary: ZOA session reaper errors detected
+              description: ZOA session reaper on cluster mc-05 reported errors for >10m. Sessions may not be stopped on deadline/idle policy.
+              runbook: "1. ZOA Workers → Worker tick errors (reaper series) and worker Lambda logs. 2. Check ECS boundary cluster health and IAM for StopTask/ListTasks on {cluster}-zoa-boundary. 3. Alert auto-recovers when reaper errors stop."

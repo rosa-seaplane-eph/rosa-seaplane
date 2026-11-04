@@ -1,7 +1,7 @@
 {
   "title": "ZOA",
   "uid": "zoa",
-  "description": "Unified ZOA dashboard: SLOs, Trusted Actions, API and Access HTTP planes, boundary sessions, workers, and infrastructure. Cluster dropdown filters metrics that carry the cluster label (or matching boundary ECS cluster name).",
+  "description": "Unified ZOA dashboard: SLOs, Trusted Actions, API and Access HTTP planes, boundary sessions, workers, and infrastructure. SLO Overview stats: ratio SLIs and execution totals aggregate over the dashboard time range; DLQ depth and P99 show the latest value at the end of that range (use charts below for trends).",
   "tags": [
     "zoa",
     "emf",
@@ -90,6 +90,7 @@
       "id": 1,
       "type": "row",
       "title": "ZOA SLO Overview",
+      "description": "Ratio SLIs (%, error rate) and TA execution count: traffic-weighted aggregate over the dashboard time range — aligned with Activity Overview bars. DLQ depth and P99 stats: point-in-time at the end of the selected range (operational gauges). Thanos alerts use separate rolling windows on recording rules.",
       "collapsed": false,
       "gridPos": {
         "x": 0,
@@ -102,7 +103,7 @@
       "id": 2,
       "type": "stat",
       "title": "TA Success Rate",
-      "description": "Succeeded / all terminal TA executions in the current CloudWatch period, aggregated across clusters selected in the Cluster dropdown (traffic-weighted). SLO target: 95%. Shows \"No executions\" when the filtered set has no volume.",
+      "description": "Window SLI: succeeded / all terminal TA executions aggregated over the dashboard time range (same basis as Executions by Status). Traffic-weighted across clusters and actions in the dropdown. SLO target 95%. Not the same window as Thanos alert ZOATASuccessRateBelowSLO.",
       "gridPos": {
         "x": 0,
         "y": 1,
@@ -116,7 +117,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(aws_zoa_execution_count_sum{dimension_Status=\"succeeded\", cluster=~\"$cluster\", dimension_Action=~\"$action\"}) / sum(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"})) and on() (sum(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"}) > 0)"
+          "expr": "(sum(sum_over_time(aws_zoa_execution_count_sum{dimension_Status=\"succeeded\", cluster=~\"$cluster\", dimension_Action=~\"$action\"}[$__range])) / sum(sum_over_time(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"}[$__range]))) and on() (sum(sum_over_time(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"}[$__range])) > 0)",
+          "instant": true
         }
       ],
       "options": {
@@ -159,7 +161,7 @@
       "id": 3,
       "type": "stat",
       "title": "API Availability",
-      "description": "Non-5xx / total HTTP requests to the API Lambda (HandlerMode=api), aggregated across clusters matching the Cluster dropdown. SLO target: 99%. Excludes 4xx (cooldown, validation). Shows \"No traffic\" when filtered volume is zero.",
+      "description": "Window SLI: non-5xx / total HTTP to the API Lambda (HandlerMode=api) over the dashboard time range. Respects Cluster dropdown. Excludes 4xx. SLO target 99%.",
       "gridPos": {
         "x": 3,
         "y": 1,
@@ -173,7 +175,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "((sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"}) - (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"5xx\", cluster=~\"$cluster\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"})) and on() (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"}) > 0)"
+          "expr": "((sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"}[$__range])) - (sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"5xx\", cluster=~\"$cluster\"}[$__range])) or vector(0))) / sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"}[$__range]))) and on() (sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", cluster=~\"$cluster\"}[$__range])) > 0)",
+          "instant": true
         }
       ],
       "options": {
@@ -216,7 +219,7 @@
       "id": 71,
       "type": "stat",
       "title": "Access Availability",
-      "description": "Non-5xx / total HTTP requests to the regional Access Lambda (HandlerMode=access). Always aggregated fleet-wide for this stat \u2014 not filtered by the Cluster dropdown (Access runs on the RC; MC selection does not apply). SLO target: 99%. Shows \"No traffic\" when there is no Access HTTP volume.",
+      "description": "Window SLI: non-5xx / total Access HTTP over the dashboard time range. Fleet-wide (not filtered by Cluster dropdown — Access is regional). SLO target 99%.",
       "gridPos": {
         "x": 6,
         "y": 1,
@@ -230,7 +233,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "((sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}) - (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\"}) or vector(0))) / sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"})) and on() (sum(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}) > 0)"
+          "expr": "((sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}[$__range])) - (sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\"}[$__range])) or vector(0))) / sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}[$__range]))) and on() (sum(sum_over_time(aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\"}[$__range])) > 0)",
+          "instant": true
         }
       ],
       "options": {
@@ -273,7 +277,7 @@
       "id": 72,
       "type": "stat",
       "title": "Identity Bridge Hit Rate",
-      "description": "Boundary attribution SLI: hit / (hit + miss + error) for ResolveIdentity, aggregated across clusters matching the Cluster dropdown. The skipped outcome (API calls without a boundary task) is not in this ratio. SLO target: 95%. Shows \"No lookups\" when there is no hit|miss|error volume in the filter.",
+      "description": "Window SLI: identity-bridge hit / (hit + miss + error) over the dashboard time range. Outcome=skipped excluded. Respects Cluster dropdown. SLO target 95%.",
       "gridPos": {
         "x": 9,
         "y": 1,
@@ -287,7 +291,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=\"hit\", cluster=~\"$cluster\"}) / sum(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~\"hit|miss|error\", cluster=~\"$cluster\"})) and on() (sum(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~\"hit|miss|error\", cluster=~\"$cluster\"}) > 0)"
+          "expr": "(sum(sum_over_time(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=\"hit\", cluster=~\"$cluster\"}[$__range])) / sum(sum_over_time(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~\"hit|miss|error\", cluster=~\"$cluster\"}[$__range]))) and on() (sum(sum_over_time(aws_zoa_identity_bridge_lookup_sum{dimension_Outcome=~\"hit|miss|error\", cluster=~\"$cluster\"}[$__range])) > 0)",
+          "instant": true
         }
       ],
       "options": {
@@ -330,7 +335,7 @@
       "id": 4,
       "type": "stat",
       "title": "Lambda Error Rate",
-      "description": "Combined Lambda error rate for api/worker in selected cluster(s) plus regional Access (.*-zoa-access). Matches recording rule zoa:lambda_error_rate. Respects Cluster dropdown for VPC Lambdas only.",
+      "description": "Window SLI: Lambda errors / invocations over the dashboard time range for api/worker in selected cluster(s) plus regional Access. Respects Cluster dropdown for VPC Lambdas only.",
       "gridPos": {
         "x": 12,
         "y": 1,
@@ -344,7 +349,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-access\"})) / clamp_min((sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-access\"})), 1) or vector(0)"
+          "expr": "(sum(sum_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}[$__range])) + sum(sum_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-access\"}[$__range]))) / clamp_min((sum(sum_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}[$__range])) + sum(sum_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-access\"}[$__range]))), 1) or vector(0)",
+          "instant": true
         }
       ],
       "options": {
@@ -382,7 +388,7 @@
       "id": 5,
       "type": "stat",
       "title": "TA Executions",
-      "description": "Terminal TA execution count in the current YACE CloudWatch window (~120s).",
+      "description": "Total terminal TA executions summed over the dashboard time range (matches Activity Overview). Respects cluster and action filters.",
       "gridPos": {
         "x": 15,
         "y": 1,
@@ -396,7 +402,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"}) or vector(0)"
+          "expr": "sum(sum_over_time(aws_zoa_execution_count_sum{cluster=~\"$cluster\", dimension_Action=~\"$action\"}[$__range])) or vector(0)",
+          "instant": true
         }
       ],
       "options": {
@@ -418,7 +425,7 @@
       "id": 6,
       "type": "stat",
       "title": "P99 Sync TA",
-      "description": "P99 latency of sync Trusted Actions (in-Lambda execution). Async TAs run as K8s Jobs with longer deadlines \u2014 see P99 Async TA and Duration by Action.",
+      "description": "Operational gauge: CloudWatch P99 sync TA latency at the end of the dashboard time range (last sample in range). For trend and spikes, use Duration by Action below. Async TAs: see P99 Async TA.",
       "gridPos": {
         "x": 17,
         "y": 1,
@@ -432,7 +439,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(aws_zoa_execution_duration_p99{cluster=~\"$cluster\", dimension_Action=~\"$action\", dimension_Mode=\"sync\"}) or vector(0)"
+          "expr": "max(last_over_time(aws_zoa_execution_duration_p99{cluster=~\"$cluster\", dimension_Action=~\"$action\", dimension_Mode=\"sync\"}[$__range])) or vector(0)",
+          "instant": true
         }
       ],
       "options": {
@@ -475,7 +483,7 @@
       "id": 8,
       "type": "stat",
       "title": "P99 Async TA",
-      "description": "P99 latency of async Trusted Actions (K8s Job-based). Minutes are normal \u2014 async TAs run outside Lambda with longer deadlines (must_gather: 30 min).",
+      "description": "Operational gauge: CloudWatch P99 async TA latency at the end of the dashboard time range (last sample in range). Long durations are normal (Jobs). See charts below for trend.",
       "gridPos": {
         "x": 19,
         "y": 1,
@@ -489,7 +497,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max(aws_zoa_execution_duration_p99{cluster=~\"$cluster\", dimension_Action=~\"$action\", dimension_Mode=\"async\"}) or vector(0)"
+          "expr": "max(last_over_time(aws_zoa_execution_duration_p99{cluster=~\"$cluster\", dimension_Action=~\"$action\", dimension_Mode=\"async\"}[$__range])) or vector(0)",
+          "instant": true
         }
       ],
       "options": {
@@ -532,7 +541,7 @@
       "id": 7,
       "type": "stat",
       "title": "DLQ Depth",
-      "description": "Visible messages on ZOA DLQ. Non-zero means worker/reconciler invocations failed and are not being retried.",
+      "description": "Operational gauge: visible ZOA DLQ messages at the end of the dashboard time range (last sample in range), summed across matching queues. Non-zero at range end means failed async work is still queued. For backlog over time, use Infrastructure charts.",
       "gridPos": {
         "x": 21,
         "y": 1,
@@ -546,7 +555,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(aws_sqs_approximate_number_of_messages_visible_maximum{dimension_QueueName=~\".*-zoa-dlq\", cluster=~\"$cluster\"}) or vector(0)"
+          "expr": "sum(last_over_time(aws_sqs_approximate_number_of_messages_visible_maximum{dimension_QueueName=~\".*-zoa-dlq\", cluster=~\"$cluster\"}[$__range])) or vector(0)",
+          "instant": true
         }
       ],
       "options": {
