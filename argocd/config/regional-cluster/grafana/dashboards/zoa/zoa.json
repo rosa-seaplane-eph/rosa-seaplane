@@ -832,7 +832,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_RouteTemplate }} {{ dimension_StatusClass }}"
         },
         {
@@ -871,12 +871,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_Cluster }} 5xx"
         },
         {
           "refId": "B",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_Cluster }} 4xx"
         },
         {
@@ -952,7 +952,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "max by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_duration_p99{dimension_HandlerMode=\"access\", dimension_Cluster=~\"$cluster\"})",
+          "expr": "max by (dimension_RouteTemplate, dimension_StatusClass) (aws_zoa_http_request_duration_p99{dimension_HandlerMode=\"access\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_RouteTemplate }} {{ dimension_StatusClass }}"
         },
         {
