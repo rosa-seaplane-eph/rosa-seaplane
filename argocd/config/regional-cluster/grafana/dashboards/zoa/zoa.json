@@ -335,7 +335,7 @@
       "id": 4,
       "type": "stat",
       "title": "Lambda Error Rate",
-      "description": "Window SLI: Lambda errors / invocations over the dashboard time range for api/worker in selected cluster(s) plus regional Access. Respects Cluster dropdown for VPC Lambdas only.",
+      "description": "Window SLI: Lambda errors / invocations over the dashboard time range for api, worker, and Access. Uses Thanos cluster label (same as Infrastructure: Lambda panels). Access appears when the regional cluster is included in the Cluster dropdown.",
       "gridPos": {
         "x": 12,
         "y": 1,
@@ -349,7 +349,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(sum_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}[$__range])) + sum(sum_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-access\"}[$__range]))) / clamp_min((sum(sum_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}[$__range])) + sum(sum_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-access\"}[$__range]))), 1) or vector(0)",
+          "expr": "sum(sum_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[$__range])) / clamp_min(sum(sum_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[$__range])), 1) or vector(0)",
           "instant": true
         }
       ],
@@ -1745,7 +1745,7 @@
       "gridPos": {
         "x": 0,
         "y": 92,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "datasource": {
@@ -1755,12 +1755,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "{{ dimension_FunctionName }}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-access\"})",
+          "expr": "sum by (dimension_FunctionName) (last_over_time(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[3h]))",
           "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
@@ -1782,9 +1777,9 @@
       "title": "Lambda Errors",
       "description": "Lambda-level errors (unhandled exceptions, timeouts, OOM). Any non-zero value means requests were completely lost.",
       "gridPos": {
-        "x": 8,
+        "x": 6,
         "y": 92,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "datasource": {
@@ -1794,12 +1789,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "{{ dimension_FunctionName }}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-access\"})",
+          "expr": "sum by (dimension_FunctionName) (last_over_time(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[3h]))",
           "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
@@ -1834,12 +1824,12 @@
     {
       "id": 43,
       "type": "timeseries",
-      "title": "Lambda Duration p99",
-      "description": "P99 Lambda execution time (wall clock). Approaching the Lambda timeout (300s) means code deadline or cold starts need investigation.",
+      "title": "Lambda Throttles",
+      "description": "Lambda throttles per function (api, worker, Access). Non-zero means reserved concurrency is exhausted. Same cluster filter as the fleet Lambda dashboard (Thanos cluster label).",
       "gridPos": {
-        "x": 16,
+        "x": 12,
         "y": 92,
-        "w": 8,
+        "w": 6,
         "h": 8
       },
       "datasource": {
@@ -1849,12 +1839,57 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
+          "expr": "sum by (dimension_FunctionName) (last_over_time(aws_lambda_throttles_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[3h])) or on() vector(0)",
           "legendFormat": "{{ dimension_FunctionName }}"
-        },
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 74,
+      "type": "timeseries",
+      "title": "Lambda Duration p99",
+      "description": "P99 Lambda execution time (wall clock). Approaching the Lambda timeout (300s) means code deadline or cold starts need investigation.",
+      "gridPos": {
+        "x": 18,
+        "y": 92,
+        "w": 6,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "targets": [
         {
-          "refId": "B",
-          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-access\"})",
+          "refId": "A",
+          "expr": "avg by (dimension_FunctionName) (last_over_time(aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}[3h]))",
           "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
