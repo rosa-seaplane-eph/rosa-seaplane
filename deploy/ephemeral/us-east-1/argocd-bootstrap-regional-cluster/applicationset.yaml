@@ -94,6 +94,7 @@ spec:
                   dynamodbRegion: '{{ .metadata.annotations.dynamodb_region }}'
                   dynamodbPrefix: '{{ .metadata.annotations.dynamodb_prefix }}'
                   oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
+                  regionalWorkloadIssuerURL: '{{ .metadata.annotations.regional_workload_issuer_url }}'
               rateLimit:
                 redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
             # Seaplane Operator values (keys must match chart's values.yaml structure)
