@@ -59,7 +59,8 @@ tests:
           - labels: 'zoa:access_availability{cluster="rc-01"}'
             value: 0.9
 
-  # Lambda error rate: api+worker per tag_Cluster plus Access in every ratio (12+0)/(200+0)=6%
+  # Lambda combined recording rules (api+worker per tag_Cluster; Access folded in).
+  # errors 12, inv 200 → error_rate 6%; throttles 10 → throttle_rate 5%.
   - interval: 1m
     input_series:
       - series: 'aws_lambda_errors_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
@@ -70,12 +71,36 @@ tests:
         values: "100x10"
       - series: 'aws_lambda_invocations_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
         values: "100x10"
+      - series: 'aws_lambda_throttles_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-api"}'
+        values: "4x10"
+      - series: 'aws_lambda_throttles_sum{cluster="mc-01",tag_Cluster="mc-01",dimension_FunctionName="eph-mc01-zoa-worker"}'
+        values: "6x10"
     promql_expr_test:
+      - expr: zoa:lambda_invocations_combined{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:lambda_invocations_combined{cluster="mc-01",tag_Cluster="mc-01"}'
+            value: 200
+      - expr: zoa:lambda_errors_combined{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:lambda_errors_combined{cluster="mc-01",tag_Cluster="mc-01"}'
+            value: 12
+      - expr: zoa:lambda_throttles_combined{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:lambda_throttles_combined{cluster="mc-01",tag_Cluster="mc-01"}'
+            value: 10
       - expr: zoa:lambda_error_rate{cluster="mc-01"}
         eval_time: 5m
         exp_samples:
           - labels: 'zoa:lambda_error_rate{cluster="mc-01",tag_Cluster="mc-01"}'
             value: 0.06
+      - expr: zoa:lambda_throttle_rate{cluster="mc-01"}
+        eval_time: 5m
+        exp_samples:
+          - labels: 'zoa:lambda_throttle_rate{cluster="mc-01",tag_Cluster="mc-01"}'
+            value: 0.05
 
   # Reconciler last-run recording rule (gap-filled from EMF gauge)
   - interval: 1m
@@ -354,6 +379,16 @@ tests:
               description: DynamoDB throttles detected on table eph-mc05-zoa-executions (cluster mc-05) for >30m. Execution state and audit writes may be degraded.
               runbook: "1. Check the throttled table in AWS Console: DynamoDB, Tables, select the table from the alert. 2. Check capacity mode: if provisioned, consider switching to on-demand or increasing RCU/WCU. 3. Check for hot partitions: CloudWatch, DynamoDB, per-partition metrics. 4. Common cause: burst of TA executions exceeding provisioned capacity. 5. Alert auto-recovers when throttling stops."
 
+  # DynamoDB throttling below volume threshold → no alert
+  - interval: 1m
+    input_series:
+      - series: 'aws_dynamodb_throttled_requests_sum{cluster="mc-05",dimension_TableName="eph-mc05-zoa-executions"}'
+        values: "5x35"
+    alert_rule_test:
+      - eval_time: 31m
+        alertname: ZOADynamoDBThrottled
+        exp_alerts: []
+
   # Total failure: 0% success with >10 executions → critical
   - interval: 1m
     input_series:
@@ -389,7 +424,7 @@ tests:
   # Alert tests — WARNING
   # ──────────────────────────────────────────────────────────────
 
-  # Lambda error rate: 10% with >10 invocations → fires warning
+  # Lambda error rate: 10% with >20 invocations for 15m → fires warning
   - interval: 1m
     input_series:
       - series: 'aws_lambda_errors_sum{cluster="mc-05",tag_Cluster="mc-05",dimension_FunctionName="eph-mc05-zoa-api"}'
@@ -413,15 +448,39 @@ tests:
               description: ZOA Lambda functions on cluster mc-05 error rate is 10% (>5%) for 15m. Combined API, worker, and Access invocations per cluster.
               runbook: "1. Check Lambda error details in CloudWatch Logs, filter by cluster and function name (api or worker). 2. Look for OOM kills (Runtime.ExitError), init failures, or handler panics. 3. If OOM: increase Lambda memory in Terraform zoa-lambda module. 4. If init panic: check recent ZOA image deployments, may need rollback. 5. If sporadic: may be transient AWS issue, monitor for self-recovery. 6. Alert auto-recovers when error rate drops below 5%."
 
-  # Lambda error rate: low traffic should NOT fire
+  # Lambda error rate: invocations guard (<=20) should NOT fire
   - interval: 1m
     input_series:
       - series: 'aws_lambda_errors_sum{cluster="mc-06",tag_Cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
-        values: "2x20"
+        values: "3x20"
       - series: 'aws_lambda_invocations_sum{cluster="mc-06",tag_Cluster="mc-06",dimension_FunctionName="eph-mc06-zoa-worker"}'
+        values: "15x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOALambdaErrorRateHigh
+        exp_alerts: []
+
+  # Lambda error rate: high rate but for not met at 10m → no alert yet
+  - interval: 1m
+    input_series:
+      - series: 'aws_lambda_errors_sum{cluster="mc-07",tag_Cluster="mc-07",dimension_FunctionName="eph-mc07-zoa-api"}'
+        values: "10x15"
+      - series: 'aws_lambda_invocations_sum{cluster="mc-07",tag_Cluster="mc-07",dimension_FunctionName="eph-mc07-zoa-api"}'
+        values: "50x15"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: ZOALambdaErrorRateHigh
+        exp_alerts: []
+
+  # Lambda error rate: low traffic (legacy guard) should NOT fire
+  - interval: 1m
+    input_series:
+      - series: 'aws_lambda_errors_sum{cluster="mc-06b",tag_Cluster="mc-06b",dimension_FunctionName="eph-mc06b-zoa-worker"}'
+        values: "2x20"
+      - series: 'aws_lambda_invocations_sum{cluster="mc-06b",tag_Cluster="mc-06b",dimension_FunctionName="eph-mc06b-zoa-worker"}'
         values: "3x20"
     alert_rule_test:
-      - eval_time: 11m
+      - eval_time: 16m
         alertname: ZOALambdaErrorRateHigh
         exp_alerts: []
 
@@ -542,6 +601,18 @@ tests:
               description: ZOA Lambda functions on cluster mc-05 throttle rate is 6% (>5%) for 20m. Combined API, worker, and Access invocations per cluster.
               runbook: "1. Check Lambda concurrent executions in ZOA dashboard, Infrastructure: Lambda. 2. Check AWS Console, Lambda, Configuration, Concurrency for the affected functions. ZOA uses reserved concurrency per VPC. 3. If concurrency is too low: increase reserved concurrency in Terraform zoa-lambda module. 4. If account-level concurrent execution limit is hit: request limit increase via AWS Support. 5. Alert auto-recovers when throttling stops."
 
+  # Lambda throttled: rate OK but for not met at 15m → no alert
+  - interval: 1m
+    input_series:
+      - series: 'aws_lambda_throttles_sum{cluster="mc-08",tag_Cluster="mc-08",dimension_FunctionName="eph-mc08-zoa-api"}'
+        values: "6x20"
+      - series: 'aws_lambda_invocations_sum{cluster="mc-08",tag_Cluster="mc-08",dimension_FunctionName="eph-mc08-zoa-api"}'
+        values: "100x20"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ZOALambdaThrottled
+        exp_alerts: []
+
   # GC stalled: last_run frozen at 0, time()-0 > 1800 for 10m → fires warning
   - interval: 1m
     input_series:
@@ -613,7 +684,7 @@ tests:
         alertname: ZOAGCStalled
         exp_alerts: []
 
-  # GC errors: phase error count >=2 for >15m → fires warning
+  # GC errors: phase error count >=2 for >20m → fires warning
   - interval: 1m
     input_series:
       - series: 'aws_zoa_gcerrors_sum{cluster="mc-05"}'
@@ -629,6 +700,16 @@ tests:
               summary: ZOA garbage collector errors detected
               description: ZOA garbage collector on cluster mc-05 reported GC phase errors (>=2 in scrape window) for >20m. Stale ServiceAccounts and RBAC may be accumulating.
               runbook: "1. Check worker Lambda logs for GC error details, filter by HandlerMode=gc. 2. Common causes: RBAC permissions insufficient to delete resources, K8s API server temporarily unreachable, namespace stuck in terminating. 3. Check if circuit breaker is also opening (ZOACircuitBreakerFlapping). 4. Impact: stale resources accumulate but do not affect TA execution. 5. Alert auto-recovers when GC errors stop."
+
+  # GC errors: single phase error count should NOT fire
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_gcerrors_sum{cluster="mc-04"}'
+        values: "1x25"
+    alert_rule_test:
+      - eval_time: 21m
+        alertname: ZOAGCErrors
+        exp_alerts: []
 
   # Circuit breaker flapping: >3 open events in 30m → fires warning
   - interval: 1m
@@ -691,6 +772,16 @@ tests:
               description: ZOA session reaper on cluster mc-05 reported reaper phase error count >=2 in scrape window for >20m (5m schedule). EMF emits at most 1 phase error per tick — sustained high values imply repeated failed ticks in CloudWatch windows.
               runbook: "1. ZOA Workers → Worker tick errors (reaper series) and worker Lambda logs. 2. Check ECS boundary cluster health and IAM for StopTask/ListTasks on {cluster}-zoa-boundary. 3. Alert auto-recovers when reaper errors stop."
 
+  # Reaper errors: below threshold (1) should NOT fire
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reaper_errors_sum{cluster="mc-04"}'
+        values: "1x25"
+    alert_rule_test:
+      - eval_time: 21m
+        alertname: ZOAReaperErrors
+        exp_alerts: []
+
   # Reconciler errors: phase count >=3 for >15m → fires warning
   - interval: 1m
     input_series:
@@ -707,3 +798,13 @@ tests:
               summary: ZOA reconciler phase errors detected
               description: ZOA reconciler on cluster mc-05 reported reconciler phase error count >=3 for >15m. Distinct from ZOAReconcilerStalled (tick stopped). Async state may not advance cleanly.
               runbook: "1. Check worker Lambda logs for reconciler phase_errors (dispatch, poll, timeout, GC phases). 2. If ZOAReconcilerStalled also fires: prioritize stalled (heartbeat lost). 3. Correlate with ZOADynamoDBThrottled and ZOACircuitBreakerFlapping. 4. Alert auto-recovers when reconciler ticks complete without phase errors."
+
+  # Reconciler errors: below threshold should NOT fire
+  - interval: 1m
+    input_series:
+      - series: 'aws_zoa_reconciler_errors_sum{cluster="mc-04"}'
+        values: "2x20"
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: ZOAReconcilerErrors
+        exp_alerts: []
