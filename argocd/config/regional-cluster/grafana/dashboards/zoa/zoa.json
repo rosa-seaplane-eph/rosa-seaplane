@@ -407,7 +407,7 @@
         }
       ],
       "options": {
-        "colorMode": "value",
+        "colorMode": "none",
         "graphMode": "area",
         "reduceOptions": {
           "calcs": [
