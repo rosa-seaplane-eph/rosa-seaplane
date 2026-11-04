@@ -446,19 +446,3 @@ serviceMonitor:
   metricRelabelings:
     - action: labeldrop
       regex: "instance|pod"
-    # YACE Lambda metrics expose AWS tags as tag_*; fleet dashboards/alerts use cluster.
-    - action: replace
-      sourceLabels: [tag_Cluster]
-      regex: (.+)
-      targetLabel: cluster
-    - action: replace
-      sourceLabels: [cluster, dimension_FunctionName]
-      regex: ;^(.+)-zoa-access$
-      targetLabel: cluster
-      replacement: $1
-    # ZOA EMF (custom namespace) uses dimension_Cluster for target/deployment scope.
-    - action: replace
-      sourceLabels: [__name__, dimension_Cluster]
-      regex: aws_zoa_.+;(.+)
-      targetLabel: cluster
-      replacement: $1

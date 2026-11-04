@@ -64,8 +64,11 @@ spec:
         # Catches pre-handler crashes that EMF misses.
         - record: zoa:lambda_error_rate
           expr: |
-            sum by (cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)", cluster!=""})
-            / sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)", cluster!=""})
+            label_replace(
+              sum by (tag_Cluster) (aws_lambda_errors_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+              / sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}),
+              "cluster", "$1", "tag_Cluster", "(.+)"
+            )
 
         # ──────────────────────────────────────────────────────────────
         # Tick health recording rules
@@ -261,7 +264,10 @@ spec:
           expr: |
             (zoa:lambda_error_rate > 0.05)
             and
-            (sum by (cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)", cluster!=""}) > 10)
+            (
+              sum by (tag_Cluster) (aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""})
+              + sum(aws_lambda_invocations_sum{dimension_FunctionName=~".*-zoa-access"})
+            ) > 10
           for: 10m
           labels:
             severity: warning
@@ -358,7 +364,7 @@ spec:
         # Lambda concurrency limits hit — scaling or configuration issue.
         - alert: ZOALambdaThrottled
           expr: |
-            sum by (cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker|access)", cluster!=""}) > 0
+            sum by (tag_Cluster) (aws_lambda_throttles_sum{dimension_FunctionName=~".*-zoa-(api|worker)", tag_Cluster!=""}) > 0
           for: 10m
           labels:
             severity: warning
