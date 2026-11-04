@@ -230,7 +230,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "(sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_errors_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})) / clamp_min((sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"}) + sum(aws_lambda_invocations_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})), 1) or vector(0)"
+          "expr": "sum(aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}) / clamp_min(sum(aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"}), 1) or vector(0)"
         }
       ],
       "options": {
@@ -1210,7 +1210,7 @@
       "id": 31,
       "type": "timeseries",
       "title": "Worker tick duration",
-      "description": "Reconciler (60s) and reaper (5m) tick duration from EMF.",
+      "description": "Reconciler (60s), GC (5m), and reaper (5m) tick duration from EMF.",
       "gridPos": {
         "x": 0,
         "y": 73,
@@ -1229,6 +1229,11 @@
         },
         {
           "refId": "B",
+          "expr": "avg by (cluster) (aws_zoa_gcduration_average{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
+          "legendFormat": "gc {{ cluster }}"
+        },
+        {
+          "refId": "C",
           "expr": "avg by (cluster) (aws_zoa_reaper_duration_average{cluster=~\"$cluster\", dimension_Cluster=~\"$cluster\"})",
           "legendFormat": "reaper {{ cluster }}"
         }
@@ -1631,13 +1636,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "vpc {{ dimension_FunctionName }}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})",
-          "legendFormat": "access {{ dimension_FunctionName }}"
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_invocations_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
+          "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {
@@ -1670,13 +1670,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "vpc {{ dimension_FunctionName }}"
-        },
-        {
-          "refId": "B",
-          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\"$cluster-zoa-access\"})",
-          "legendFormat": "access {{ dimension_FunctionName }}"
+          "expr": "sum by (dimension_FunctionName) (aws_lambda_errors_sum{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
+          "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {
@@ -1725,13 +1720,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker)\", tag_Cluster=~\"$cluster\"})",
-          "legendFormat": "vpc {{ dimension_FunctionName }}"
-        },
-        {
-          "refId": "B",
-          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\"$cluster-zoa-access\"})",
-          "legendFormat": "access {{ dimension_FunctionName }}"
+          "expr": "avg by (dimension_FunctionName) (aws_lambda_duration_p99{dimension_FunctionName=~\".*-zoa-(api|worker|access)\", cluster=~\"$cluster\"})",
+          "legendFormat": "{{ dimension_FunctionName }}"
         }
       ],
       "fieldConfig": {
