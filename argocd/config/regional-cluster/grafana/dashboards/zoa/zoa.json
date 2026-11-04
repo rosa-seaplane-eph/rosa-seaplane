@@ -857,7 +857,7 @@
       "id": 66,
       "type": "timeseries",
       "title": "Access 5xx vs 4xx",
-      "description": "Session POST routes (start/join/…) vs laptop GET routes. Join 404 before session load uses DEPLOYMENT_NAME as dimension_Cluster. Period sums drop to 0 when idle (YACE nilToZero).",
+      "description": "A/B session routes ($cluster). C/D deployment routes: health, version, targets, sessions (list and history share GET /api/v0/sessions).",
       "gridPos": {
         "x": 12,
         "y": 29,
@@ -871,22 +871,22 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_RouteTemplate=~\"POST /api/v0/sessions/start|POST /api/v0/sessions/join/\\{id\\}|POST /api/v0/sessions/exec-attached/\\{id\\}|POST /api/v0/sessions/terminate/\\{id\\}\"}) > 0",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_Cluster }} 5xx"
         },
         {
           "refId": "B",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_RouteTemplate=~\"POST /api/v0/sessions/start|POST /api/v0/sessions/join/\\{id\\}|POST /api/v0/sessions/exec-attached/\\{id\\}|POST /api/v0/sessions/terminate/\\{id\\}\"}) > 0",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_Cluster=~\"$cluster\", dimension_RouteTemplate!~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "session {{ dimension_Cluster }} 4xx"
         },
         {
           "refId": "C",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_RouteTemplate=~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"}) > 0",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"5xx\", dimension_RouteTemplate=~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "deploy {{ dimension_Cluster }} 5xx"
         },
         {
           "refId": "D",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_RouteTemplate=~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"}) > 0",
+          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"access\", dimension_StatusClass=\"4xx\", dimension_RouteTemplate=~\"GET /health|GET /version|GET /api/v0/targets|GET /api/v0/sessions\"})",
           "legendFormat": "deploy {{ dimension_Cluster }} 4xx"
         }
       ],
@@ -1093,7 +1093,7 @@
       "id": 22,
       "type": "timeseries",
       "title": "5xx vs 4xx by Cluster",
-      "description": "4xx includes cooldown and validation rejections (expected). 5xx means API unavailability. Values are CloudWatch period sums (YACE nilToZero): they return to 0 when the scrape window has no errors, not a cumulative counter.",
+      "description": "4xx includes cooldown and validation rejections (expected). 5xx means API unavailability.",
       "gridPos": {
         "x": 12,
         "y": 55,
@@ -1107,13 +1107,13 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"5xx\", dimension_Cluster=~\"$cluster\"}) > 0",
-          "legendFormat": "{{ dimension_Cluster }} 5xx"
+          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"5xx\", dimension_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ cluster }} 5xx"
         },
         {
           "refId": "B",
-          "expr": "sum by (dimension_Cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"4xx\", dimension_Cluster=~\"$cluster\"}) > 0",
-          "legendFormat": "{{ dimension_Cluster }} 4xx"
+          "expr": "sum by (cluster) (aws_zoa_http_request_count_sum{dimension_HandlerMode=\"api\", dimension_StatusClass=\"4xx\", dimension_Cluster=~\"$cluster\"})",
+          "legendFormat": "{{ cluster }} 4xx"
         }
       ],
       "fieldConfig": {
