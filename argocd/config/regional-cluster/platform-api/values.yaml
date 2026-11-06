@@ -21,7 +21,7 @@ platformApi:
     name: platform-api
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-api
-      tag: "on-pr-cb48f08cf387645f9d6e107f2e0d9c399a7d28bb"
+      tag: "on-pr-7902b86a0e150c588f86ee80346b46ca8ecf9825"
       pullPolicy: Always
 
     # Application arguments
