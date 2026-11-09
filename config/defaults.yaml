@@ -29,8 +29,8 @@ git:
 deployment_name: "{{ aws_region }}"
 
 # @doc platform_image Platform container image, built by Konflux from terraform/modules/platform-image/Dockerfile and shared from ECR. Runs the RC/MC CodeBuild projects and the ECS bootstrap, bastion, and log-collection tasks.
-# @used-by platform_image pipeline-provisioner-inputs/regional-cluster.json.j2
 # @used-by platform_image pipeline-provisioner-inputs/management-cluster.json.j2
+# @used-by platform_image pipeline-provisioner-inputs/regional-cluster.json.j2
 platform_image: "669421954122.dkr.ecr.us-east-1.amazonaws.com/rosa-seaplane-ci:73edae04747b6a448843db403fc938060aac4bca"
 
 aws:
@@ -190,8 +190,8 @@ regional_cluster:
   # @used-by regional_cluster.zoa_boundary_session_idle_timeout_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_idle_timeout_seconds: 3600
   # @doc regional_cluster.zoa_boundary_session_stale_creating_seconds Max seconds a session may stay in creating before the worker reaper terminates it (SESSION_STALE_CREATING_SECONDS on zoa-lambda worker).
-  # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-management-cluster-inputs/terraform.json.j2
+  # @used-by regional_cluster.zoa_boundary_session_stale_creating_seconds pipeline-regional-cluster-inputs/terraform.json.j2
   zoa_boundary_session_stale_creating_seconds: 900
   # @doc regional_cluster.zoa_boundary_session_max_duration_hours Default/max boundary session length (hours). RC zoa-access only (deadline in Dynamo + ZOA_SESSION_DEADLINE on task).
   # @used-by regional_cluster.zoa_boundary_session_max_duration_hours pipeline-regional-cluster-inputs/terraform.json.j2
@@ -248,14 +248,9 @@ cluster_lifecycle:
 applications:
   management-cluster:
     ecrCredsSync:
-      # @doc applications.management-cluster.ecrCredsSync ECR credentials sync controller configuration. Deployed when management_cluster_defaults.enable_ecr_creds_sync is true.
+      # @doc applications.management-cluster.ecrCredsSync ECR credentials sync controller configuration. Deployed when management_cluster_defaults.enable_ecr_creds_sync is true. ecrRepository, awsRegion, and sourceSecrets are derived from SSM annotations (ecr_mirror_*) by the ApplicationSet template and must not be set here.
       # @used-by applications.management-cluster.ecrCredsSync _context
       enabled: "{{ management_cluster_defaults.enable_ecr_creds_sync }}"
-      ecrRepository: ""
-      awsRegion: "{{ aws_region }}"
-      # @doc applications.management-cluster.ecrCredsSync.sourceSecrets Comma-separated Secret names in each HCP namespace that ecr-creds-sync merges before writing ECR credentials to pull-secret. Must match applications.regional-cluster.seaplane.ecrMirror.baseSecretName so that ESO (which writes base-pull-secret) and ecr-creds-sync (which reads it and writes pull-secret) do not conflict. Required when ecrMirror is enabled; leave empty otherwise.
-      # @used-by applications.management-cluster.ecrCredsSync.sourceSecrets _context
-      sourceSecrets: ""
     eksNodePool:
       # @doc applications.management-cluster.eksNodePool.instanceFamilies Instance families for the MC Karpenter NodePool.
       # @used-by applications.management-cluster.eksNodePool.instanceFamilies _context
@@ -327,14 +322,12 @@ applications:
           defaultClusterExpiration: "{{ cluster_lifecycle.default_expiration }}"
     seaplane:
       ecrMirror:
-        # @doc applications.regional-cluster.seaplane.ecrMirror Seaplane Operator ECR mirror configuration. When enabled, injects ECR_MIRROR_* env vars into the operator so it populates imageContentSources on every HostedCluster and redirects the ESO pull-secret target to baseSecretName. All fields including baseSecretName are required when enabled: without baseSecretName, ESO writes directly to pull-secret and ecr-creds-sync overwrites it, losing the SSM credentials. Set applications.management-cluster.ecrCredsSync.sourceSecrets to the same value as baseSecretName. Must be set explicitly per environment; intentionally decoupled from management_cluster_defaults.enable_ecr_creds_sync so that enabling credential sync alone does not activate the mirror with incomplete configuration.
+        # @doc applications.regional-cluster.seaplane.ecrMirror Seaplane Operator ECR mirror configuration. When enabled, the operator reads ECR_MIRROR_* env vars to populate imageContentSources on every HostedCluster and redirect the ESO pull-secret target. All five ECR_MIRROR_* values (account, region, repository, sources, base-secret-name) are sourced from SSM parameters (/infra/image-registry/*) provisioned by rosa-seaplane-internal and threaded in as ArgoCD cluster secret annotations at bootstrap time. Must be set explicitly per environment; intentionally decoupled from management_cluster_defaults.enable_ecr_creds_sync.
         # @used-by applications.regional-cluster.seaplane.ecrMirror _context
+        # SSM parameters are provisioned in rosa-seaplane-internal for eph and int
+        # environments but the mirror is not yet active. Set enabled: true per
+        # environment (e.g. config/integration/defaults.yaml) and re-bootstrap to activate.
         enabled: false
-        registryAccount: ""
-        registryRegion: "{{ aws_region }}"
-        repository: ""
-        sources: ""
-        baseSecretName: ""
       # @doc applications.regional-cluster.seaplane.oidcS3Bucket S3 bucket name the Seaplane Operator writes OIDC discovery documents to.
       # @used-by applications.regional-cluster.seaplane.oidcS3Bucket _context
       # NOTE: This value is overridden in the ApplicationSet valuesObject (config/templates/argocd-bootstrap/applicationset.yaml.j2)
