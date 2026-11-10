@@ -47,6 +47,8 @@ dns:
   domain: "{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org"
 
 regional_cluster:
+  # Authz tables are created and destroyed with the ephemeral RC.
+  enable_ephemeral_authz_tables: true
   enable_bastion: true
   enable_write_sre_tools: true
   node_instance_families: ["m8i-flex", "m7i-flex"]
