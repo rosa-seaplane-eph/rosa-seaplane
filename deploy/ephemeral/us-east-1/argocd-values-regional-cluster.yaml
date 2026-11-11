@@ -13,13 +13,14 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
-baseDomain: us-east-1.eph-dev0.rosa.devshift.org
+baseDomain: us-east-1-eph-c2fc0a30.eph-dev0.rosa.devshift.org
 platformApi:
   authz:
     tables:
-      policies: us-east-1-authz-policies
-      global: us-east-1-authz-global
-      regional: us-east-1-authz-regional
+      policies: us-east-1-eph-c2fc0a30-authz-policies
+      global: us-east-1-eph-c2fc0a30-authz-global
+      regional: us-east-1-eph-c2fc0a30-authz-regional
+    config: "formatVersion: 1\nregisteredAccounts: [\"599476212575\", \"114594328247\"]\npolicies:\n  - id: read-clusters-599476212575\n    ownerAccountID: \"599476212575\"\n    content: |\n      permit(principal, action in Seaplane::Action::\"AllActions\", resource)\n      when { context.accountId == \"599476212575\" && context.region == \"us-east-1\" }\n      unless { context.requestLabels.hasTag(\"authz-deny-probe\") };\n  - id: read-clusters-114594328247\n    ownerAccountID: \"114594328247\"\n    content: |\n      permit(principal, action in Seaplane::Action::\"AllActions\", resource)\n      when { context.accountId == \"114594328247\" && context.region == \"us-east-1\" }\n      unless { context.requestLabels.hasTag(\"authz-deny-probe\") };\nattachments:\n  - id: dev-readers-599476212575\n    policyID: read-clusters-599476212575\n    principalARN: arn:aws:iam::599476212575:role/rosa-seaplane-account-admin\n    scope: regional\n    region: us-east-1\n  - id: dev-readers-114594328247\n    policyID: read-clusters-114594328247\n    principalARN: arn:aws:iam::114594328247:role/rosa-seaplane-account-admin\n    scope: regional\n    region: us-east-1"
   app:
     args:
       defaultClusterExpiration: ''
@@ -31,7 +32,7 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
+  oidcS3Bucket: hypershift-eph-c2fc0a30-regional-oidc-355913614193
 pagerduty:
   enabled: false
 grafana:

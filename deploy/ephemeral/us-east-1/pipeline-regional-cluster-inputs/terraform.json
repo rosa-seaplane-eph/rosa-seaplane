@@ -4,12 +4,12 @@
   "service_phase": "dev",
   "cost_center": "000",
   "environment": "ephemeral",
-  "account_id": "ssm:///infra/us-east-1/rc/account_id",
+  "account_id": "355913614193",
   "image_registry_account_id": "ssm:///infra/image-registry/account_id",
   "region": "us-east-1",
-  "authz_tables": {"global": "us-east-1-authz-global", "policies": "us-east-1-authz-policies", "regional": "us-east-1-authz-regional"},
+  "authz_tables": {"global": "us-east-1-eph-c2fc0a30-authz-global", "policies": "us-east-1-eph-c2fc0a30-authz-policies", "regional": "us-east-1-eph-c2fc0a30-authz-regional"},
   "enable_ephemeral_authz_tables": true,
-  "deployment_name": "us-east-1",
+  "deployment_name": "us-east-1-eph-c2fc0a30",
   "alias": "regional-us-east-1",
   "enable_bastion": true,
   "enable_cloudtrail": false,
@@ -29,8 +29,8 @@
   "sre_prometheus_oidc_client_id": "",
   "sre_thanos_oidc_client_id": "",
   "environment_domain": "eph-dev0.rosa.devshift.org",
-  "regional_id": "regional",
-  "eph_prefix": "",
+  "regional_id": "eph-c2fc0a30-regional",
+  "eph_prefix": "eph-c2fc0a30",
   "seaplane_db_instance_class": "db.t4g.medium",
   "seaplane_db_deletion_protection": false,
   "zoa_dynamodb_deletion_protection": false,
@@ -53,5 +53,5 @@
   "zoa_access_trusted_assumer_role_name_suffixes": ["rosa-seaplane-zoa-operator-eph-dev", "rosa-hyperfleet-eph-dev-admin"],
   "worker_node_ami_id": "ami-00ad69a77c77c2a61",
   "worker_node_root_volume_size": 50,
-  "management_clusters_info": [{"account_id": "ssm:///infra/us-east-1/mc01/account_id", "id": "mc01"}]
+  "management_clusters_info": [{"account_id": "815341162064", "id": "eph-c2fc0a30-mc01"}]
 }
