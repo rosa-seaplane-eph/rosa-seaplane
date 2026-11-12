@@ -13,13 +13,13 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
-baseDomain: us-east-1.eph-dev0.rosa.devshift.org
+baseDomain: us-east-1-eph-3a0e4f11.eph-dev0.rosa.devshift.org
 platformApi:
   authz:
     tables:
-      policies: us-east-1-authz-policies
-      global: us-east-1-authz-global
-      regional: us-east-1-authz-regional
+      policies: us-east-1-eph-3a0e4f11-authz-policies
+      global: us-east-1-eph-3a0e4f11-authz-global
+      regional: us-east-1-eph-3a0e4f11-authz-regional
   app:
     args:
       defaultClusterExpiration: ''
@@ -31,7 +31,7 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
+  oidcS3Bucket: hypershift-eph-3a0e4f11-regional-oidc-355913614193
 pagerduty:
   enabled: false
 grafana:
