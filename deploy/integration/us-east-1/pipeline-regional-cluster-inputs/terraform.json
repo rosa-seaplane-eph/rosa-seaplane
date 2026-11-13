@@ -28,8 +28,8 @@
   "sre_thanos_oidc_client_id": "rrp-thanos-sre-int0-us-east-1",
   "environment_domain": "int0.rosa.devshift.org",
   "dns_shard0_account_id": "ssm:///infra/us-east-1/dns00/account_id",
-  "regional_id": "regional",
-  "eph_prefix": "",
+  "regional_id": "eph-abf697-regional",
+  "eph_prefix": "eph-abf697",
   "seaplane_db_instance_class": "db.r6g.large",
   "seaplane_db_deletion_protection": false,
   "zoa_dynamodb_deletion_protection": false,
@@ -52,5 +52,5 @@
   "zoa_access_trusted_assumer_role_name_suffixes": ["rosa-seaplane-zoa-operator-int"],
   "worker_node_ami_id": "ami-00ad69a77c77c2a61",
   "worker_node_root_volume_size": 50,
-  "management_clusters_info": [{"account_id": "ssm:///infra/us-east-1/mc01/account_id", "id": "mc01"}]
+  "management_clusters_info": [{"account_id": "ssm:///infra/us-east-1/mc01/account_id", "id": "eph-abf697-mc01"}]
 }
