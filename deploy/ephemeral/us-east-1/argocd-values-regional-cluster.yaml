@@ -13,7 +13,7 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
-baseDomain: us-east-1.eph-dev0.rosa.devshift.org
+baseDomain: us-east-1-eph-bec562.eph-ci0.rosa.devshift.org
 platformApi:
   authz:
     config: "formatVersion: 1\nregisteredAccounts: [\"@@AWS_ACCOUNT_ID@@\"]\npolicies:\n  - id: rc-all-actions\n    ownerAccountID: \"@@AWS_ACCOUNT_ID@@\"\n    content: |\n      permit(principal, action in Seaplane::Action::\"AllActions\", resource)\n      when { context.accountId == \"@@AWS_ACCOUNT_ID@@\" }\n      unless { context.requestLabels.hasTag(\"authz-deny-probe\") };\nattachments:\n  - id: rc-child-admin\n    policyID: rc-all-actions\n    principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:role/rosa-seaplane-account-admin\n    scope: global\n  - id: rc-e2e-user\n    policyID: rc-all-actions\n    principalARN: arn:aws:iam::@@AWS_ACCOUNT_ID@@:user/e2e\n    scope: global"
@@ -28,7 +28,7 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
+  oidcS3Bucket: hypershift-eph-bec562-regional-oidc-584398484911
 pagerduty:
   enabled: false
 grafana:
