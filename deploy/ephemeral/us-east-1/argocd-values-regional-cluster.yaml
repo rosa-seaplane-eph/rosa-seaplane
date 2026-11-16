@@ -13,16 +13,18 @@ eksNodePool:
     family: AL2023
     id: ami-00ad69a77c77c2a61
   rootVolumeSize: 50Gi
-baseDomain: us-east-1.eph-dev0.rosa.devshift.org
+baseDomain: us-east-1-eph-3bdbd4bc.eph-dev0.rosa.devshift.org
 platformApi:
   authz:
     tables:
-      policies: us-east-1-authz-policies
-      global: us-east-1-authz-global
-      regional: us-east-1-authz-regional
+      policies: us-east-1-eph-3bdbd4bc-authz-policies
+      global: us-east-1-eph-3bdbd4bc-authz-global
+      regional: us-east-1-eph-3bdbd4bc-authz-regional
   app:
     args:
       defaultClusterExpiration: ''
+    image:
+      tag: on-pr-1ac2eeb6459aa5c4d108056963a1e01f08987a20@sha256:2d945519f57bce74c84835b29a189effa28d8ba36ee59c7789f1df0b16cd1bdb
   limits:
     maxRequestBodyBytes: 10485760
     maxRequestHeaderBytes: 16384
@@ -31,7 +33,10 @@ platformApi:
     writeTimeoutSeconds: 30
     idleTimeoutSeconds: 60
 seaplane:
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
+  oidcS3Bucket: hypershift-eph-3bdbd4bc-regional-oidc-355913614193
+  source:
+    repoURL: https://github.com/Alcamech/rosa-hyperfleet-api.git
+    targetRevision: 1ac2eeb6459aa5c4d108056963a1e01f08987a20
 pagerduty:
   enabled: false
 grafana:
