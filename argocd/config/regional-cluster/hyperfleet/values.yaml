@@ -8,8 +8,10 @@ seaplane:
   project: default
 
   source:
-    repoURL: https://github.com/openshift-online/rosa-seaplane-api.git
-    targetRevision: aa468081b3e0148fccfb173dbf94a973da572ecf
+    # TESTING (ROSAENG-1085): chart from the rosa-seaplane-api#701 PR branch so
+    # CRDs/chart match the on-PR operator image below. Revert before merge.
+    repoURL: https://github.com/typeid/rosa-seaplane-api.git
+    targetRevision: 3df4546faad5bd3f9e8f704c6e563a338661ff72
     path: seaplane-operator/charts
 
   syncPolicy:
@@ -20,7 +22,7 @@ seaplane:
   helmValues:
     image:
       repository: quay.io/redhat-user-workloads/rosa-tenant/rosa-seaplane-operator
-      tag: "aa468081b3e0148fccfb173dbf94a973da572ecf@sha256:339a450cf31ec048ebf61312ce102ae9cdbbb35552a183c911be70e590eda9f4"
+      tag: "on-pr-3df4546faad5bd3f9e8f704c6e563a338661ff72@sha256:cc3f47426bffa6c3cd9d846883e24620fe4e2235697af169198d449320bc1597"
       pullPolicy: Always
 
     replicaCount: 2
