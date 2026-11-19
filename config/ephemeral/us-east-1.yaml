@@ -1,2 +1,5 @@
 provision_mcs:
   mc01: {}
+aws:
+  account_id: '355913614193'
+  management_cluster_account_id: '815341162064'
