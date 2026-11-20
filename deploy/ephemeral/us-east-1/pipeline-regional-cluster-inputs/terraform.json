@@ -4,14 +4,14 @@
   "service_phase": "dev",
   "cost_center": "000",
   "environment": "ephemeral",
-  "account_id": "ssm:///infra/us-east-1/rc/account_id",
+  "account_id": "355913614193",
   "image_registry_account_id": "ssm:///infra/image-registry/account_id",
   "region": "us-east-1",
-  "authz_tables": {"global": "us-east-1-authz-global", "policies": "us-east-1-authz-policies", "regional": "us-east-1-authz-regional"},
+  "authz_tables": {"global": "us-east-1-eph-e84a5fb1-authz-global", "policies": "us-east-1-eph-e84a5fb1-authz-policies", "regional": "us-east-1-eph-e84a5fb1-authz-regional"},
   "authz_dynamodb_deletion_protection": false,
-  "custom_authorizer": {"authorizer_image_uri": "quay.io/cdoan0/seaplane-authorizer:poc", "enabled": false, "keycloak_domain_name": "keycloak-origin.us-east-1.{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org", "rh_token_audience": "", "rh_token_issuer": "", "rh_token_jwks_url": "", "table": "us-east-1-account-links"},
+  "custom_authorizer": {"authorizer_image_uri": "quay.io/cdoan0/seaplane-authorizer:poc", "enabled": false, "keycloak_domain_name": "keycloak-origin.us-east-1-eph-e84a5fb1.{% if ci %}eph-ci0{% else %}eph-dev0{% endif %}.rosa.devshift.org", "rh_token_audience": "", "rh_token_issuer": "", "rh_token_jwks_url": "", "table": "us-east-1-eph-e84a5fb1-account-links"},
 >>>>>>> f2dd0e25 (Phase 4 PoC: wire custom-authorizer config through the render pipeline)
-  "deployment_name": "us-east-1",
+  "deployment_name": "us-east-1-eph-e84a5fb1",
   "alias": "regional-us-east-1",
   "enable_bastion": true,
   "enable_cloudtrail": false,
@@ -32,8 +32,8 @@
   "sre_thanos_oidc_client_id": "",
   "environment_domain": "eph-dev0.rosa.devshift.org",
   "dns_shard0_account_id": "ssm:///infra/us-east-1/dns00/account_id",
-  "regional_id": "regional",
-  "eph_prefix": "",
+  "regional_id": "eph-e84a5fb1-regional",
+  "eph_prefix": "eph-e84a5fb1",
   "seaplane_db_instance_class": "db.t4g.medium",
   "seaplane_db_deletion_protection": false,
   "zoa_dynamodb_deletion_protection": false,
@@ -56,5 +56,5 @@
   "zoa_access_trusted_assumer_role_name_suffixes": ["rosa-seaplane-zoa-operator-eph-dev", "rosa-hyperfleet-eph-dev-admin"],
   "worker_node_ami_id": "ami-02c0be6b661d6caf5",
   "worker_node_root_volume_size": 50,
-  "management_clusters_info": [{"account_id": "ssm:///infra/us-east-1/mc01/account_id", "id": "mc01"}]
+  "management_clusters_info": [{"account_id": "815341162064", "id": "eph-e84a5fb1-mc01"}]
 }
