@@ -13,15 +13,15 @@ eksNodePool:
     family: AL2023
     id: ami-02c0be6b661d6caf5
   rootVolumeSize: 50Gi
-baseDomain: us-east-1.eph-dev0.rosa.devshift.org
+baseDomain: us-east-1-eph-8be4d946.eph-dev0.rosa.devshift.org
 platformApi:
   authz:
     tables:
-      policies: us-east-1-authz-policies
-      global: us-east-1-authz-global
-      regional: us-east-1-authz-regional
+      policies: us-east-1-eph-8be4d946-authz-policies
+      global: us-east-1-eph-8be4d946-authz-global
+      regional: us-east-1-eph-8be4d946-authz-regional
   linking:
-    table: us-east-1-account-links
+    table: us-east-1-eph-8be4d946-account-links
     rhTokenIssuer: ''
     rhTokenJwksUrl: ''
     rhTokenAudience: ''
@@ -45,7 +45,7 @@ console:
 seaplane:
   ecrMirror:
     enabled: false
-  oidcS3Bucket: hypershift--regional-oidc-ssm:///infra/us-east-1/rc/account_id
+  oidcS3Bucket: hypershift-eph-8be4d946-regional-oidc-355913614193
 pagerduty:
   enabled: false
 grafana:
