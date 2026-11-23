@@ -51,6 +51,13 @@ dns:
   shard0_account_id: "ssm:///infra/{{ aws_region }}/dns00/account_id"
 
 regional_cluster:
+  # Infrastructure remains opt-in via enable_installer_role_poc. The owning
+  # ephemeral deployment uses its unique prefix and keeps table state separate.
+  enable_account_access_table_provisioning: true
+  account_access_environment_id: "ephemeral-{{ eph_prefix }}"
+  account_access_table_region: "{{ aws_region }}"
+  account_access_enable_pitr: false
+  account_access_deletion_protection: false
   enable_bastion: true
   enable_write_sre_tools: true
   node_instance_families: ["m8i-flex", "m7i-flex"]

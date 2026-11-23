@@ -342,6 +342,11 @@ module "ecs_bootstrap" {
   rc_aws_account_id = var.target_account_id
   redis_endpoint    = var.enable_rate_limit_redis ? "${module.elasticache_valkey[0].endpoint}:${module.elasticache_valkey[0].port}" : ""
 
+  account_access_environment_id = var.enable_installer_role_poc ? var.account_access_environment_id : ""
+  installer_jump_role_arn       = var.enable_installer_role_poc ? aws_iam_role.installer_jump[0].arn : ""
+  account_access_table_arn      = var.enable_installer_role_poc ? var.account_access_table_arn : ""
+  account_access_table_region   = var.enable_installer_role_poc ? var.account_access_table_region : ""
+
   # ZOA read-only IAM DB role provisioning (runs psql during bootstrap).
   # The RC always has seaplane-db, so enable it unconditionally here. This
   # flag is known at plan time and drives the bootstrap IAM policy's count;
@@ -715,6 +720,120 @@ module "elasticache_valkey" {
 
   node_type      = var.valkey_node_type
   engine_version = var.valkey_engine_version
+}
+
+# =============================================================================
+# Platform API IAM (installer-role PoC)
+# =============================================================================
+
+# Platform API's backend table access uses workload credentials. Customer AWS
+# access uses a separate hop through the deployment's dedicated jump role.
+locals {
+  account_access_tags = {
+    EnvironmentID = var.account_access_environment_id
+    Deployment    = var.deployment_name
+    Component     = "platform-api"
+    function      = "platform-api"
+    module        = "regional-cluster"
+    ManagedBy     = "terraform"
+  }
+}
+
+resource "aws_iam_role" "platform_api" {
+  count = var.enable_installer_role_poc ? 1 : 0
+  name  = "${var.deployment_name}-platform-api"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "pods.eks.amazonaws.com" }
+      Action    = ["sts:AssumeRole", "sts:TagSession"]
+      Condition = {
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+        }
+        ArnEquals = {
+          "aws:SourceArn" = module.regional_cluster.cluster_arn
+        }
+      }
+    }]
+  })
+
+  tags = merge(local.account_access_tags, { Name = "${var.deployment_name}-platform-api" })
+}
+
+resource "aws_eks_pod_identity_association" "platform_api" {
+  count           = var.enable_installer_role_poc ? 1 : 0
+  cluster_name    = module.regional_cluster.cluster_name
+  namespace       = var.platform_api_namespace
+  service_account = var.platform_api_service_account
+  role_arn        = aws_iam_role.platform_api[0].arn
+
+  # Keep EKS's transitive session tags out of the two-hop customer role chain.
+  # The PoC's jump/customer trust permits AssumeRole without TagSession.
+  disable_session_tags = true
+
+  tags = merge(local.account_access_tags, { Name = "${var.deployment_name}-platform-api-pod-identity" })
+}
+
+resource "aws_iam_role_policy" "platform_api_account_access" {
+  count = var.enable_installer_role_poc ? 1 : 0
+  name  = "account-access"
+  role  = aws_iam_role.platform_api[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AssociationStore"
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"]
+        Resource = var.account_access_table_arn
+      },
+      {
+        Sid      = "AssumeInstallerJumpRole"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.installer_jump[0].arn
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role" "installer_jump" {
+  count                = var.enable_installer_role_poc ? 1 : 0
+  name                 = "${var.deployment_name}-installer-jump"
+  max_session_duration = 3600
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { AWS = aws_iam_role.platform_api[0].arn }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = merge(local.account_access_tags, { Name = "${var.deployment_name}-installer-jump" })
+}
+
+resource "aws_iam_role_policy" "installer_jump" {
+  count = var.enable_installer_role_poc ? 1 : 0
+  name  = "assume-customer-installer"
+  role  = aws_iam_role.installer_jump[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "sts:AssumeRole"
+      Resource = "arn:aws:iam::*:role/*"
+      Condition = {
+        StringEquals = { "iam:ResourceTag/seaplane-access" = "true" }
+      }
+    }]
+  })
 }
 
 # =============================================================================

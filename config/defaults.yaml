@@ -101,6 +101,30 @@ worker_node_ami:
 worker_node_root_volume_size: 50
 
 regional_cluster:
+  # @doc regional_cluster.enable_installer_role_poc Provision installer-role PoC AWS identities and store access. Opt in only for an isolated ephemeral environment.
+  # @used-by regional_cluster.enable_installer_role_poc pipeline-regional-cluster-inputs/terraform.json.j2
+  enable_installer_role_poc: false
+  # @doc regional_cluster.enable_account_access_table_provisioning Own the single association table in separate environment state. Additional regional consumers must leave this disabled and supply its ARN/region.
+  # @used-by regional_cluster.enable_account_access_table_provisioning pipeline-regional-cluster-inputs/terraform.json.j2
+  enable_account_access_table_provisioning: false
+  # @doc regional_cluster.account_access_environment_id Unique environment identifier shared by regional consumers. Required when the installer-role PoC is enabled.
+  # @used-by regional_cluster.account_access_environment_id pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_environment_id: ""
+  # @doc regional_cluster.account_access_table_arn Explicit association table ARN for consumers. The owning deployment may leave it empty to derive its environment-specific ARN.
+  # @used-by regional_cluster.account_access_table_arn pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_table_arn: ""
+  # @doc regional_cluster.account_access_table_region Table hosting region, independent of the API/discovery region.
+  # @used-by regional_cluster.account_access_table_region pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_table_region: ""
+  # @doc regional_cluster.account_access_enable_pitr Enable point-in-time recovery for the environment-owned association table.
+  # @used-by regional_cluster.account_access_enable_pitr pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_enable_pitr: true
+  # @doc regional_cluster.account_access_deletion_protection Protect the association table from final cleanup until explicitly disabled.
+  # @used-by regional_cluster.account_access_deletion_protection pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_deletion_protection: true
+  # @doc regional_cluster.account_access_consumer_role_arns Exact workload-role allowlist for cross-account table consumers. Same-account consumers use only identity policies.
+  # @used-by regional_cluster.account_access_consumer_role_arns pipeline-regional-cluster-inputs/terraform.json.j2
+  account_access_consumer_role_arns: []
   # @doc regional_cluster.enable_bastion Enable bastion host for regional cluster access.
   # @used-by regional_cluster.enable_bastion pipeline-regional-cluster-inputs/terraform.json.j2
   enable_bastion: false

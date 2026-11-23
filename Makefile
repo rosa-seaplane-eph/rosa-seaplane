@@ -90,6 +90,8 @@ terraform-output-regional: ## Get Terraform output for Regional Cluster
 # Validation & Testing Targets
 # =============================================================================
 
+.PHONY: terraform-test
+
 # Initialize root Terraform configurations (no backend)
 terraform-init:
 	@echo "🔧 Initializing Terraform configurations..."
@@ -105,7 +107,11 @@ terraform-init:
 # Note: fmt runs on all dirs (modules + configs), but validate only runs on
 # root configs because child modules with provider configuration_aliases
 # cannot be validated in isolation.
-terraform-validate: terraform-init ## Check formatting and validate all Terraform configs
+terraform-test: terraform-init ## Run installer-role PoC plans with mocked AWS providers
+	@terraform -chdir=terraform/config/account-access-dynamodb-provisioning test
+	@terraform -chdir=terraform/config/regional-cluster test
+
+terraform-validate: terraform-init terraform-test ## Check formatting, mock plans, and validate all Terraform configs
 	@echo "🔍 Checking Terraform formatting..."
 	@echo "$(TERRAFORM_DIRS)" | tr ' ' '\n' | xargs -P 8 -I{} sh -c ' \
 		echo "   Checking formatting in $$1"; \

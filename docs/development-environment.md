@@ -172,6 +172,66 @@ Overrides are applied during `provision` and `resync`. To update a running envir
 make ephemeral-resync ID=<id>
 ```
 
+### Installer-role PoC infrastructure
+
+Opt in to the installer-role PoC in `.ephemeral-env/defaults.yaml`:
+
+```yaml
+regional_cluster:
+  enable_installer_role_poc: true
+```
+
+Keep a region file such as `.ephemeral-env/us-east-1.yaml` as described above;
+the override directory requires both the defaults and a region configuration.
+
+The ephemeral defaults create one on-demand DynamoDB association table in the
+regional account and configured `account_access_table_region`. The unique
+`account_access_environment_id` defaults to `ephemeral-<eph_prefix>`. Table state
+lives at `account-access-dynamodb/<environment-id>.tfstate` in the owning
+deployment's regional Terraform state bucket, separately from RC state.
+
+Platform API receives a dedicated Pod Identity role for its configured service
+account (`platform-api/platform-api-sa` by default). That role can read/write
+association records and assume only this deployment's installer jump role. The
+jump role can assume customer roles tagged `seaplane-access=true`. Terraform
+disables EKS session tags for this association so they do not propagate through
+the jump and customer roles. The workload trust is restricted to its AWS account
+and EKS cluster; the association selects the namespace and service account. Terraform
+exports the workload/jump ARNs and table ARN/region, and bootstrap writes
+`account_access_environment_id`, `installer_jump_role_arn`,
+`account_access_table_arn`, and `account_access_table_region` on ArgoCD's cluster
+identity secret. API ConfigMap wiring and endpoints are implemented separately.
+
+Additional regional consumers must set
+`enable_account_access_table_provisioning: false` and explicitly supply the
+owner's `account_access_table_arn`, `account_access_table_region`, and
+`account_access_environment_id`. Each deployment keeps its own workload and jump
+roles. Cross-account consumers also need their exact workload role ARNs added to
+the table owner's `account_access_consumer_role_arns`; same-account consumers
+need no table resource policy. Existing NAT routes and HTTPS egress support
+cross-region table access; the local DynamoDB gateway endpoint handles local
+traffic. No replicas are created.
+
+Regional teardown preserves this shared table, including when the owning RC is
+removed. After **all** consumers and tests finish, remove their test associations
+and explicitly destroy the table using its separate Terraform root. With
+credentials for the owning account, initialize that root against the state
+bucket/key above and run:
+
+```bash
+terraform -chdir=terraform/config/account-access-dynamodb-provisioning destroy \
+  -var-file=/path/to/account-access.tfvars
+```
+
+The variable file must retain the owner's environment ID, hosting region, and
+resource tags (`account_access_environment_id`, `region`, `environment`,
+`eph_prefix`, `app_code`, `service_phase`, `cost_center`). Ephemeral defaults disable
+PITR and deletion protection for disposable tests. If protection was enabled,
+first apply `account_access_deletion_protection=false` to this state. Preserve the
+owner's state bucket and state until final cleanup completes. Regional teardown
+does not delete customer installer roles created by ROSA; their cleanup belongs
+to the acceptance harness after every environment finishes using them.
+
 ## List Environments
 
 Lists environments you have provisioned from your local machine. State is cached in the `.ephemeral-envs` file in the repo root — you can clear it at any time by deleting the file.

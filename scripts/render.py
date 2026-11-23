@@ -416,6 +416,12 @@ def build_context(
             f"environments, got environment '{env_name}'"
         )
 
+    if ctx["regional_cluster"].get("enable_installer_role_poc") and env_name != "ephemeral":
+        raise ValueError(
+            "regional_cluster.enable_installer_role_poc can only be true for "
+            f"isolated ephemeral environments, got environment '{env_name}'"
+        )
+
     return ctx
 
 
@@ -819,6 +825,8 @@ def main() -> int:
             mc_list = build_mc_list(ctx, merged, eph_prefix)
             validate_cluster_topology(merged, ctx, mc_list, env_name, region)
             ctx["management_clusters"] = mc_list
+            app_config = resolve_templates(ctx.get("applications", {}), ctx)
+            ctx["applications"] = app_config
             env_region_mcs[env_name][region] = {mc["management_id"] for mc in mc_list}
 
             out_dir = deploy_dir / env_name / region
@@ -829,8 +837,6 @@ def main() -> int:
             render_file(templates_dir, "pipeline-regional-cluster-inputs/terraform.json", ctx, out_dir / "pipeline-regional-cluster-inputs" / "terraform.json")
 
             # Per-cluster-type: ArgoCD values + bootstrap
-            app_config = resolve_templates(ctx.get("applications", {}), ctx)
-
             for ct in cluster_types:
                 ct_ctx = {**ctx, "cluster_type": ct, "application_values": app_config.get(ct, {})}
                 render_file(templates_dir, "argocd-values.yaml", ct_ctx, out_dir / f"argocd-values-{ct}.yaml")

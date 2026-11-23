@@ -213,6 +213,10 @@ resource "aws_ecs_task_definition" "bootstrap" {
               sre_alb_dns_name: "$SRE_ALB_DNS_NAME"
               sre_domain: "$SRE_DOMAIN"
               redis_endpoint: "$REDIS_ENDPOINT"
+              account_access_environment_id: "$ACCOUNT_ACCESS_ENVIRONMENT_ID"
+              installer_jump_role_arn: "$INSTALLER_JUMP_ROLE_ARN"
+              account_access_table_arn: "$ACCOUNT_ACCESS_TABLE_ARN"
+              account_access_table_region: "$ACCOUNT_ACCESS_TABLE_REGION"
               ecr_mirror_registry_account: "$ECR_MIRROR_REGISTRY_ACCOUNT"
               ecr_mirror_region: "$ECR_MIRROR_REGION"
               ecr_mirror_repository: "$ECR_MIRROR_REPOSITORY"
@@ -319,6 +323,22 @@ resource "aws_ecs_task_definition" "bootstrap" {
         {
           name  = "REDIS_ENDPOINT"
           value = var.redis_endpoint
+        },
+        {
+          name  = "ACCOUNT_ACCESS_ENVIRONMENT_ID"
+          value = var.account_access_environment_id
+        },
+        {
+          name  = "INSTALLER_JUMP_ROLE_ARN"
+          value = var.installer_jump_role_arn
+        },
+        {
+          name  = "ACCOUNT_ACCESS_TABLE_ARN"
+          value = var.account_access_table_arn
+        },
+        {
+          name  = "ACCOUNT_ACCESS_TABLE_REGION"
+          value = var.account_access_table_region
         },
         {
           name  = "VPC_ID"

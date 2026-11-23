@@ -413,3 +413,28 @@ output "deployment_name" {
   description = "Logical deployment name (ZOA Access/SSM discovery, DNS). Same value passed to module.zoa_access."
   value       = var.deployment_name
 }
+
+output "platform_api_role_arn" {
+  description = "Platform API Pod Identity workload role for the installer-role PoC."
+  value       = var.enable_installer_role_poc ? aws_iam_role.platform_api[0].arn : ""
+}
+
+output "installer_jump_role_arn" {
+  description = "Dedicated jump role trusted by customer installer roles."
+  value       = var.enable_installer_role_poc ? aws_iam_role.installer_jump[0].arn : ""
+}
+
+output "account_access_environment_id" {
+  description = "Unique environment identifier for installer-role associations."
+  value       = var.enable_installer_role_poc ? var.account_access_environment_id : ""
+}
+
+output "account_access_table_arn" {
+  description = "Explicit reference to the separately owned shared association table."
+  value       = var.enable_installer_role_poc ? var.account_access_table_arn : ""
+}
+
+output "account_access_table_region" {
+  description = "Table hosting region, independent of the API/discovery region."
+  value       = var.enable_installer_role_poc ? var.account_access_table_region : ""
+}

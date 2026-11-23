@@ -2,6 +2,62 @@
 # Regional Cluster Infrastructure Variables
 # =============================================================================
 
+variable "enable_installer_role_poc" {
+  description = "Provision Platform API workload identity and the installer jump role for the isolated ephemeral PoC."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.enable_installer_role_poc || (var.environment == "ephemeral" && var.eph_prefix != "" && var.account_access_environment_id != "")
+    error_message = "The installer-role PoC requires an ephemeral deployment with a unique eph_prefix and account_access_environment_id."
+  }
+}
+
+variable "account_access_environment_id" {
+  description = "Unique environment identifier shared by regional association-store consumers."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.account_access_environment_id == "" || can(regex("^[a-z0-9][a-z0-9-]{0,199}$", var.account_access_environment_id))
+    error_message = "account_access_environment_id must be 1-200 lowercase alphanumeric or hyphen characters, starting with an alphanumeric character."
+  }
+}
+
+variable "account_access_table_arn" {
+  description = "Explicit ARN of the environment-owned table. This regional state never owns the table."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = !var.enable_installer_role_poc || can(regex("^arn:aws[a-z-]*:dynamodb:${var.account_access_table_region}:[0-9]{12}:table/[A-Za-z0-9_.-]+$", var.account_access_table_arn))
+    error_message = "The installer-role PoC requires a table ARN matching account_access_table_region."
+  }
+}
+
+variable "account_access_table_region" {
+  description = "Explicit table hosting region, independent of this API's region."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = !var.enable_installer_role_poc || can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]+$", var.account_access_table_region))
+    error_message = "The installer-role PoC requires the table hosting region."
+  }
+}
+
+variable "platform_api_namespace" {
+  description = "Platform API namespace from its configured Helm values."
+  type        = string
+  default     = "platform-api"
+}
+
+variable "platform_api_service_account" {
+  description = "Platform API service-account name from its configured Helm values."
+  type        = string
+  default     = "platform-api-sa"
+}
+
 variable "regional_id" {
   description = "Deterministic regional cluster identifier for resource naming (e.g., 'regional' or 'xg4y-regional' in CI)"
   type        = string

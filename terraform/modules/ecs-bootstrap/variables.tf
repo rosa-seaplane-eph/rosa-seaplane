@@ -82,6 +82,30 @@ variable "redis_endpoint" {
   default     = ""
 }
 
+variable "account_access_environment_id" {
+  description = "Unique installer-role PoC environment ID for the cluster identity annotations."
+  type        = string
+  default     = ""
+}
+
+variable "installer_jump_role_arn" {
+  description = "Deployment's installer jump-role ARN for GitOps configuration."
+  type        = string
+  default     = ""
+}
+
+variable "account_access_table_arn" {
+  description = "Explicit reference to the environment-owned shared association table."
+  type        = string
+  default     = ""
+}
+
+variable "account_access_table_region" {
+  description = "Association table hosting region, independent of the API region."
+  type        = string
+  default     = ""
+}
+
 # -----------------------------------------------------------------------------
 # Seaplane DB — ZOA read-only IAM role provisioning (RC only)
 #

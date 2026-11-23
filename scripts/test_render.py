@@ -795,6 +795,21 @@ class TestBuildContext:
             ctx = build_context(merged, env, "us-east-1", "")
             assert ctx["regional_cluster"]["enable_write_sre_tools"] is False
 
+    @pytest.mark.parametrize("environment", ["integration", "stage", "production"])
+    def test_installer_role_poc_rejected_outside_ephemeral(self, environment):
+        with pytest.raises(ValueError, match="isolated ephemeral"):
+            build_context(
+                {"regional_cluster": {"enable_installer_role_poc": True}},
+                environment, "us-east-1", "test1234",
+            )
+
+    def test_installer_role_poc_allows_unique_ephemeral(self):
+        ctx = build_context(
+            {"regional_cluster": {"enable_installer_role_poc": True}},
+            "ephemeral", "us-east-1", "test1234",
+        )
+        assert ctx["regional_cluster"]["enable_installer_role_poc"] is True
+
 
 # =============================================================================
 # build_mc_list
@@ -1633,6 +1648,43 @@ class TestMainIntegration:
         assert data["environment"] == "staging"
         assert data["region"] == "us-east-1"
         assert data["_generated"].startswith("DO NOT EDIT")
+
+    def test_installer_poc_renders_shared_location_and_configured_service_account(self, tmp_path):
+        deploy_dir = self._run_main(
+            tmp_path,
+            global_defaults={
+                "regional_cluster": {
+                    "enable_installer_role_poc": True,
+                    "enable_account_access_table_provisioning": False,
+                    "account_access_environment_id": "ephemeral-{{ eph_prefix }}",
+                    "account_access_table_region": "us-west-2",
+                    "account_access_table_arn": "arn:aws:dynamodb:us-west-2:111111111111:table/shared-account-access",
+                },
+                "applications": {
+                    "regional-cluster": {
+                        "platformApi": {
+                            "namespace": "api-{{ eph_prefix }}",
+                            "serviceAccount": {"name": "{{ eph_prefix }}-api-sa"},
+                        },
+                    },
+                },
+            },
+            environments={
+                "ephemeral": {"defaults": {}, "regions": {"us-east-1": {"provision_mcs": {}}}},
+            },
+            eph_prefix="test1234",
+        )
+        region_dir = deploy_dir / "ephemeral" / "us-east-1"
+        inputs = json.loads((region_dir / "pipeline-regional-cluster-inputs" / "terraform.json").read_text())
+        assert inputs["region"] == "us-east-1"
+        assert inputs["account_access_table_region"] == "us-west-2"
+        assert inputs["account_access_table_arn"] == "arn:aws:dynamodb:us-west-2:111111111111:table/shared-account-access"
+        assert inputs["account_access_environment_id"] == "ephemeral-test1234"
+        assert inputs["enable_installer_role_poc"] is True
+        assert inputs["enable_account_access_table_provisioning"] is False
+        values = yaml.safe_load((region_dir / "argocd-values-regional-cluster.yaml").read_text())
+        assert inputs["platform_api_namespace"] == values["platformApi"]["namespace"] == "api-test1234"
+        assert inputs["platform_api_service_account"] == values["platformApi"]["serviceAccount"]["name"] == "test1234-api-sa"
 
     def test_ephemeral_ci_uses_eph_ci_zoa_trust_in_regional_terraform_json(
         self, tmp_path, monkeypatch
@@ -3189,6 +3241,140 @@ fi
         )
         assert '"$RC_CONFIG_FILE"' in rc
         assert '"$DEPLOY_CONFIG_FILE"' in mc
+
+
+class TestAccountAccessProvisioning:
+    """Exercise RC/table provisioning with AWS and Terraform calls replaced."""
+
+    def _prepare(self, tmp_path, config=None, **runtime):
+        inputs = json.loads((PROJECT_ROOT / "deploy/ephemeral/us-east-1/pipeline-regional-cluster-inputs/terraform.json").read_text())
+        inputs.update({
+            "enable_installer_role_poc": True,
+            "enable_account_access_table_provisioning": False,
+            "account_access_environment_id": "ephemeral-test1234",
+            "account_access_table_region": "us-west-2",
+            "account_access_table_arn": "",
+            "regional_id": "test1234-regional",
+            "eph_prefix": "test1234",
+            "dns_shard0_account_id": "",
+            "enable_pagerduty": False,
+            "enable_sre_public_access": False,
+            "enable_sre_oidc_auth": False,
+            **(config or {}),
+        })
+        for key, value in runtime.items():
+            if key.startswith("TF_VAR_"):
+                inputs[key.removeprefix("TF_VAR_")] = json.loads(value) if value in ("true", "false") else value
+        config_file = tmp_path / "config.json"
+        config_file.write_text(json.dumps(inputs))
+        event_log = tmp_path / "terraform-events"
+
+        # Run the real provisioning script in a temporary working directory.
+        # Shared parsers stay real; credentials, AWS calls, and Terraform are stubbed.
+        common = tmp_path / "scripts/pipeline-common"
+        common.mkdir(parents=True)
+        (common / "lib.sh").write_text('''
+source "$REPO_ROOT/scripts/pipeline-common/lib.sh"
+preflight_check() { :; }
+config_load() { :; }
+use_mc_account() { :; }
+build_management_clusters_tf_var() { :; }
+aws() { [[ "$1" == "configure" && "$2" == "set" ]]; }
+''')
+        (common / "terraform-lib.sh").write_text('''
+source "$REPO_ROOT/scripts/pipeline-common/terraform-lib.sh"
+ssm_get_param_with_fallback() { printf 'o-test/r-test/ou-test/*\\n'; }
+tf_init_backend() { printf 'init|%s|%s|%s|%s\\n' "$@" >> "$EVENT_LOG"; }
+tf_apply() { printf 'apply|%s|%s|%s|%s\\n' "$1" "$2" "$TF_VAR_region" "${TF_VAR_account_access_enable_pitr:-unset}" >> "$EVENT_LOG"; }
+tf_validate_outputs() { :; }
+''')
+        env = {
+            **os.environ,
+            "REPO_ROOT": str(PROJECT_ROOT),
+            "DEPLOY_CONFIG_FILE": str(config_file),
+            "EVENT_LOG": str(event_log),
+            "TARGET_ACCOUNT_ID": "111111111111",
+            "TARGET_REGION": "us-east-1",
+            "REGIONAL_ID": inputs["regional_id"],
+            "ENVIRONMENT": inputs["environment"],
+            "REPOSITORY_URL": "https://example.invalid/seaplane",
+            "PLATFORM_IMAGE": "example.invalid/platform:test",
+            "IS_DESTROY": "false",
+            **runtime,
+        }
+        result = subprocess.run(
+            ["bash", "-c", '''
+set -euo pipefail
+source "$REPO_ROOT/scripts/buildspec/provision-infra-rc.sh"
+printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
+'''],
+            cwd=tmp_path, env=env, capture_output=True, text=True,
+        )
+        events = event_log.read_text().splitlines() if event_log.exists() else []
+        if result.returncode == 0:
+            action = "destroy" if env["IS_DESTROY"] == "true" else "apply"
+            assert events[-1] == f"apply|terraform/config/regional-cluster|{action}|us-east-1|unset"
+        table_events = [event for event in events if "terraform/config/account-access-dynamodb-provisioning|" in event]
+        return result, table_events
+
+    def test_owner_provisions_separate_state_without_changing_service_region(self, tmp_path):
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+            "account_access_enable_pitr": False,
+        })
+        assert result.returncode == 0, result.stderr
+        assert events == [
+            "init|terraform/config/account-access-dynamodb-provisioning|terraform-state-111111111111-us-east-1|account-access-dynamodb/ephemeral-test1234.tfstate|us-east-1",
+            "apply|terraform/config/account-access-dynamodb-provisioning|apply|us-west-2|false",
+        ]
+        assert result.stdout.splitlines()[-1] == "result|arn:aws:dynamodb:us-west-2:111111111111:table/ephemeral-test1234-account-access|us-east-1"
+
+    def test_regional_destroy_preserves_shared_table(self, tmp_path):
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+        }, IS_DESTROY="true")
+        assert result.returncode == 0, result.stderr
+        assert events == []
+
+    def test_consumer_uses_explicit_table_without_provisioning(self, tmp_path):
+        table = "arn:aws:dynamodb:us-west-2:222222222222:table/existing-access"
+        result, events = self._prepare(tmp_path, TF_VAR_account_access_table_arn=table)
+        assert result.returncode == 0, result.stderr
+        assert events == []
+        assert result.stdout.splitlines()[-1] == f"result|{table}|us-east-1"
+
+    def test_consumer_missing_table_fails(self, tmp_path):
+        result, events = self._prepare(tmp_path)
+        assert result.returncode != 0
+        assert "requires account_access_table_arn" in result.stderr
+        assert events == []
+
+    def test_owner_rejects_another_tables_arn(self, tmp_path):
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+        }, TF_VAR_account_access_table_arn="arn:aws:dynamodb:us-west-2:222222222222:table/another-table")
+        assert result.returncode != 0
+        assert "owner configuration disagrees" in result.stderr
+        assert events == []
+
+    @pytest.mark.parametrize("runtime", [
+        {"TF_VAR_environment": "stage"},
+        {"TF_VAR_eph_prefix": ""},
+        {"TF_VAR_account_access_table_region": ""},
+    ])
+    def test_invalid_poc_context_fails_before_table_provisioning(self, tmp_path, runtime):
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+        }, **runtime)
+        assert result.returncode != 0
+        assert events == []
+
+    def test_disabled_poc_skips_provisioning(self, tmp_path):
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+        }, TF_VAR_enable_installer_role_poc="false")
+        assert result.returncode == 0, result.stderr
+        assert events == []
 
 
 if __name__ == "__main__":
