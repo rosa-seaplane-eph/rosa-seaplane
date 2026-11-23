@@ -120,3 +120,31 @@ run "isolated_two_hop_access" {
     error_message = "The jump must trust only the workload and assume only access-tagged customer roles."
   }
 }
+
+run "reject_noncommercial_table_arn" {
+  command = plan
+  plan_options {
+    target = [aws_eks_pod_identity_association.platform_api, aws_iam_role_policy.platform_api_account_access, aws_iam_role_policy.installer_jump]
+  }
+
+  variables {
+    enable_installer_role_poc = true
+    account_access_table_arn  = "arn:aws-us-gov:dynamodb:us-west-2:222222222222:table/shared-account-access"
+  }
+
+  expect_failures = [var.account_access_table_arn]
+}
+
+run "reject_environment_id_longer_than_api_limit" {
+  command = plan
+  plan_options {
+    target = [aws_eks_pod_identity_association.platform_api, aws_iam_role_policy.platform_api_account_access, aws_iam_role_policy.installer_jump]
+  }
+
+  variables {
+    enable_installer_role_poc     = true
+    account_access_environment_id = join("", [for i in range(129) : "a"])
+  }
+
+  expect_failures = [var.account_access_environment_id]
+}

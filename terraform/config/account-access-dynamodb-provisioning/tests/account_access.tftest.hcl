@@ -112,3 +112,34 @@ run "reject_account_wide_consumer" {
 
   expect_failures = [var.consumer_role_arns]
 }
+
+run "api_environment_id_format" {
+  command = plan
+
+  module {
+    source = "../../modules/account-access-dynamodb"
+  }
+
+  variables {
+    environment_id = "Ephemeral_TEST-123"
+  }
+
+  assert {
+    condition     = aws_dynamodb_table.account_access.name == "Ephemeral_TEST-123-account-access"
+    error_message = "Table provisioning must accept the API's environment ID characters."
+  }
+}
+
+run "reject_environment_id_longer_than_api_limit" {
+  command = plan
+
+  module {
+    source = "../../modules/account-access-dynamodb"
+  }
+
+  variables {
+    environment_id = join("", [for i in range(129) : "a"])
+  }
+
+  expect_failures = [var.environment_id]
+}

@@ -200,7 +200,24 @@ and EKS cluster; the association selects the namespace and service account. Terr
 exports the workload/jump ARNs and table ARN/region, and bootstrap writes
 `account_access_environment_id`, `installer_jump_role_arn`,
 `account_access_table_arn`, and `account_access_table_region` on ArgoCD's cluster
-identity secret. API ConfigMap wiring and endpoints are implemented separately.
+identity secret. The regional ApplicationSet passes these values to
+`platformApi.installerRole` in the API chart. The same
+`enable_installer_role_poc` flag enables both the infrastructure and API
+configuration; no additional API enablement setting is required. The API/discovery
+region remains `global.aws_region`, independently of the table hosting region.
+
+The API chart owns the ConfigMap, read-only mount, `INSTALLER_ROLE_ENABLED` and
+`INSTALLER_ROLE_CONFIG_FILE` variables, and pod checksum that restarts pods on
+configuration changes. It defaults to format version `1`, trust-template version
+`"1"`, and `arn:aws:iam::aws:policy/service-role/ROSAInstallerPolicy`. Environment
+IDs must be 1–128 letters, digits, underscores, or hyphens and start with a letter
+or digit. Jump-role and table ARNs must use the commercial `aws` partition.
+
+Before deploying with the PoC enabled, pin the API chart revision and built image
+containing installer-role configuration support in
+`argocd/config/regional-cluster/platform-api/values.yaml`. Configuration delivery
+does not implement account-association storage or installer-role HTTP routes;
+those are later PoC steps.
 
 Additional regional consumers must set
 `enable_account_access_table_provisioning: false` and explicitly supply the

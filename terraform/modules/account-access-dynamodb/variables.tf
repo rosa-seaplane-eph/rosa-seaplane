@@ -3,8 +3,8 @@ variable "environment_id" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,199}$", var.environment_id))
-    error_message = "environment_id must be 1-200 lowercase alphanumeric or hyphen characters, starting with an alphanumeric character."
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", var.environment_id))
+    error_message = "environment_id must be 1-128 letters, digits, underscores or hyphens, starting with a letter or digit."
   }
 }
 

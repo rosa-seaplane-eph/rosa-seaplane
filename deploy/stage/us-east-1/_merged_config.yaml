@@ -107,7 +107,8 @@ worker_node_ami:
 worker_node_root_volume_size: 50
 
 regional_cluster:
-  # @doc regional_cluster.enable_installer_role_poc Provision installer-role PoC AWS identities and store access. Opt in only for an isolated ephemeral environment.
+  # @doc regional_cluster.enable_installer_role_poc Enable installer-role PoC AWS identities, store access, and API configuration together. Opt in only for an isolated ephemeral environment.
+  # @used-by regional_cluster.enable_installer_role_poc argocd-bootstrap/applicationset.yaml.j2
   # @used-by regional_cluster.enable_installer_role_poc pipeline-regional-cluster-inputs/terraform.json.j2
   enable_installer_role_poc: false
   # @doc regional_cluster.enable_account_access_table_provisioning Own the single association table in separate environment state. Additional regional consumers must leave this disabled and supply its ARN/region.

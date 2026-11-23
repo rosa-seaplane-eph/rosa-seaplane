@@ -19,8 +19,8 @@ variable "account_access_environment_id" {
   default     = ""
 
   validation {
-    condition     = var.account_access_environment_id == "" || can(regex("^[a-z0-9][a-z0-9-]{0,199}$", var.account_access_environment_id))
-    error_message = "account_access_environment_id must be 1-200 lowercase alphanumeric or hyphen characters, starting with an alphanumeric character."
+    condition     = var.account_access_environment_id == "" || can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", var.account_access_environment_id))
+    error_message = "account_access_environment_id must be 1-128 letters, digits, underscores or hyphens, starting with a letter or digit."
   }
 }
 
@@ -30,8 +30,8 @@ variable "account_access_table_arn" {
   default     = ""
 
   validation {
-    condition     = !var.enable_installer_role_poc || can(regex("^arn:aws[a-z-]*:dynamodb:${var.account_access_table_region}:[0-9]{12}:table/[A-Za-z0-9_.-]+$", var.account_access_table_arn))
-    error_message = "The installer-role PoC requires a table ARN matching account_access_table_region."
+    condition     = !var.enable_installer_role_poc || can(regex("^arn:aws:dynamodb:${var.account_access_table_region}:[0-9]{12}:table/[A-Za-z0-9_.-]{3,255}$", var.account_access_table_arn))
+    error_message = "The installer-role PoC requires a commercial AWS table ARN matching account_access_table_region."
   }
 }
 

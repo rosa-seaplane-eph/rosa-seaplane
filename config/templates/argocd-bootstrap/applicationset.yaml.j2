@@ -90,6 +90,16 @@ spec:
                   oidcIssuerBaseURL: 'https://{{ '{{ .metadata.annotations.oidc_cloudfront_domain }}' }}'
               rateLimit:
                 redisEndpoint: '{{ '{{ .metadata.annotations.redis_endpoint }}' }}'
+{%- if cluster_type == 'regional-cluster' %}
+              # Use the same flag as the workload/jump roles and association store.
+              installerRole:
+                enabled: {{ regional_cluster.enable_installer_role_poc | default(false) | tojson }}
+                environmentId: '{{ '{{ index .metadata.annotations "account_access_environment_id" | default "" }}' }}'
+                jumpRoleArn: '{{ '{{ index .metadata.annotations "installer_jump_role_arn" | default "" }}' }}'
+                accountAccess:
+                  tableArn: '{{ '{{ index .metadata.annotations "account_access_table_arn" | default "" }}' }}'
+                  tableRegion: '{{ '{{ index .metadata.annotations "account_access_table_region" | default "" }}' }}'
+{%- endif %}
             # Seaplane Operator values (keys must match chart's values.yaml structure)
             seaplane:
               oidcS3Bucket: '{{ '{{ .metadata.annotations.oidc_bucket_name }}' }}'

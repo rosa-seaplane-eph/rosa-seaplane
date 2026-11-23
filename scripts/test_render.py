@@ -1933,6 +1933,42 @@ class TestMainIntegration:
             assert "registryAccount: ''" not in content
             assert "registryRegion: ''" not in content
 
+    @pytest.mark.parametrize("environment,enabled", [
+        ("ephemeral", True), ("ephemeral", False), ("integration", False), ("stage", False),
+    ])
+    def test_installer_role_appset_uses_poc_flag_and_bootstrap_identity(self, tmp_path, environment, enabled):
+        defaults = load_yaml(PROJECT_ROOT / "config/defaults.yaml")
+        env_defaults = load_yaml(PROJECT_ROOT / "config" / environment / "defaults.yaml")
+        overrides = {
+            "regional_cluster": {"enable_installer_role_poc": enabled},
+            # A chart-value override cannot bypass the canonical infrastructure flag.
+            "applications": {"regional-cluster": {"platformApi": {"installerRole": {"enabled": True}}}},
+        }
+        deploy = self._run_main(
+            tmp_path, defaults,
+            {environment: {
+                "defaults": deep_merge(env_defaults, overrides),
+                "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
+            }},
+            eph_prefix="test1234" if environment == "ephemeral" else "",
+        )
+        region = deploy / environment / "us-east-1"
+        rc = load_yaml(region / "argocd-bootstrap-regional-cluster/applicationset.yaml")
+        values = rc["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]
+        installer = values["platformApi"]["installerRole"]
+        assert installer == {
+            "enabled": enabled,
+            "environmentId": '{{ index .metadata.annotations "account_access_environment_id" | default "" }}',
+            "jumpRoleArn": '{{ index .metadata.annotations "installer_jump_role_arn" | default "" }}',
+            "accountAccess": {
+                "tableArn": '{{ index .metadata.annotations "account_access_table_arn" | default "" }}',
+                "tableRegion": '{{ index .metadata.annotations "account_access_table_region" | default "" }}',
+            },
+        }
+        assert values["global"]["aws_region"] == '{{ .metadata.labels.aws_region }}'
+        mc = load_yaml(region / "argocd-bootstrap-management-cluster/applicationset.yaml")
+        assert "installerRole" not in mc["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]["platformApi"]
+
     def test_ecr_mirror_enabled_flag_comes_from_config(self, tmp_path):
         """The enabled flag must come from config (explicit opt-in), not annotations."""
         deploy_dir = self._run_main(
@@ -3095,7 +3131,33 @@ class TestPlatformAPIChartWrapper:
             "failureThreshold": 3,
         }
         assert child_values["global"]["aws_region"] == "us-east-1"
+        assert child_values["platformApi"]["installerRole"]["enabled"] is False
         assert "seaplane" not in child_values
+
+    def test_installer_role_runtime_values_are_forwarded_with_independent_regions(self, tmp_path):
+        installer = {
+            "enabled": True,
+            "environmentId": "Ephemeral_TEST-123",
+            "jumpRoleArn": "arn:aws:iam::111111111111:role/us-east-1-test1234-installer-jump",
+            "accountAccess": {
+                "tableArn": "arn:aws:dynamodb:us-west-2:222222222222:table/shared-account-access",
+                "tableRegion": "us-west-2",
+            },
+        }
+        resources, _ = _helm_platform(tmp_path, {
+            "global": {"aws_region": "us-east-1"},
+            "platformApi": {"installerRole": installer},
+        })
+        app = _resource(resources, "Application", "seaplane-api")
+        values = yaml.safe_load(app["spec"]["source"]["helm"]["values"])
+        assert values["global"]["aws_region"] == "us-east-1"
+        assert values["platformApi"]["installerRole"] == {
+            **installer,
+            "formatVersion": 1,
+            "trustTemplateVersion": "1",
+            "installerManagedPolicyArn": "arn:aws:iam::aws:policy/service-role/ROSAInstallerPolicy",
+        }
+        assert [resource["kind"] for resource in resources] == ["Application"]
 
     def test_environment_values_and_globals_are_forwarded(self, tmp_path):
         content = AUTHZ_BUNDLE
@@ -3361,6 +3423,8 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         {"TF_VAR_environment": "stage"},
         {"TF_VAR_eph_prefix": ""},
         {"TF_VAR_account_access_table_region": ""},
+        {"TF_VAR_account_access_environment_id": "a" * 129},
+        {"TF_VAR_account_access_environment_id": "_invalid"},
     ])
     def test_invalid_poc_context_fails_before_table_provisioning(self, tmp_path, runtime):
         result, events = self._prepare(tmp_path, {
@@ -3375,6 +3439,16 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         }, TF_VAR_enable_installer_role_poc="false")
         assert result.returncode == 0, result.stderr
         assert events == []
+
+    def test_environment_id_accepts_api_supported_case_and_underscore(self, tmp_path):
+        environment_id = "Env_" + "a" * 124
+        result, events = self._prepare(tmp_path, {
+            "enable_account_access_table_provisioning": True,
+            "account_access_environment_id": environment_id,
+        })
+        assert result.returncode == 0, result.stderr
+        assert f"account-access-dynamodb/{environment_id}.tfstate" in events[0]
+        assert result.stdout.splitlines()[-1] == f"result|arn:aws:dynamodb:us-west-2:111111111111:table/{environment_id}-account-access|us-east-1"
 
 
 if __name__ == "__main__":

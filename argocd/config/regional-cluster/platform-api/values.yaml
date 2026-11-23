@@ -85,6 +85,20 @@ platformApi:
       policies: []
       attachments: []
 
+  # The API chart creates and mounts the installer-role ConfigMap. ApplicationSet
+  # supplies runtime identity/table values and derives enabled from the existing
+  # regional_cluster.enable_installer_role_poc flag (ephemeral environments only).
+  installerRole:
+    enabled: false
+    formatVersion: 1
+    environmentId: ""
+    jumpRoleArn: ""
+    installerManagedPolicyArn: arn:aws:iam::aws:policy/service-role/ROSAInstallerPolicy
+    trustTemplateVersion: "1"
+    accountAccess:
+      tableArn: ""
+      tableRegion: ""
+
   # Rate Limiting configuration
   rateLimit:
     enabled: true
