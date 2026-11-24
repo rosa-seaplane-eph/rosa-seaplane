@@ -416,12 +416,6 @@ def build_context(
             f"environments, got environment '{env_name}'"
         )
 
-    if ctx["regional_cluster"].get("enable_installer_role_poc") and env_name != "ephemeral":
-        raise ValueError(
-            "regional_cluster.enable_installer_role_poc can only be true for "
-            f"isolated ephemeral environments, got environment '{env_name}'"
-        )
-
     return ctx
 
 

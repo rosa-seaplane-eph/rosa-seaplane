@@ -121,6 +121,25 @@ run "isolated_two_hop_access" {
   }
 }
 
+run "standing_environment_without_ephemeral_prefix" {
+  command = plan
+  plan_options {
+    target = [aws_eks_pod_identity_association.platform_api, aws_iam_role_policy.platform_api_account_access, aws_iam_role_policy.installer_jump]
+  }
+
+  variables {
+    enable_installer_role_poc     = true
+    environment                   = "stage"
+    eph_prefix                    = ""
+    account_access_environment_id = "stage"
+  }
+
+  assert {
+    condition     = length(aws_iam_role.platform_api) == 1 && length(aws_iam_role.installer_jump) == 1 && aws_iam_role.platform_api[0].tags.EnvironmentID == "stage"
+    error_message = "An explicitly enabled standing environment must not require an ephemeral prefix."
+  }
+}
+
 run "reject_noncommercial_table_arn" {
   command = plan
   plan_options {

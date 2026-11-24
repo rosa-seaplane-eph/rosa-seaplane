@@ -3,13 +3,13 @@
 # =============================================================================
 
 variable "enable_installer_role_poc" {
-  description = "Provision Platform API workload identity and the installer jump role for the isolated ephemeral PoC."
+  description = "Provision Platform API workload identity and the installer jump role for the installer-role PoC."
   type        = bool
   default     = false
 
   validation {
-    condition     = !var.enable_installer_role_poc || (var.environment == "ephemeral" && var.eph_prefix != "" && var.account_access_environment_id != "")
-    error_message = "The installer-role PoC requires an ephemeral deployment with a unique eph_prefix and account_access_environment_id."
+    condition     = !var.enable_installer_role_poc || var.account_access_environment_id != ""
+    error_message = "The installer-role PoC requires account_access_environment_id."
   }
 }
 

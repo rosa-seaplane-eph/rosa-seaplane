@@ -87,7 +87,7 @@ platformApi:
 
   # The API chart creates and mounts the installer-role ConfigMap. ApplicationSet
   # supplies runtime identity/table values and derives enabled from the existing
-  # regional_cluster.enable_installer_role_poc flag (ephemeral environments only).
+  # regional_cluster.enable_installer_role_poc flag.
   installerRole:
     enabled: false
     formatVersion: 1

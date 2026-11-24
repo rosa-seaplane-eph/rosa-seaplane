@@ -11,7 +11,7 @@
   "alias": "regional-us-east-1",
   "enable_installer_role_poc": false,
   "enable_account_access_table_provisioning": false,
-  "account_access_environment_id": "",
+  "account_access_environment_id": "stage",
   "account_access_table_arn": "",
   "account_access_table_region": "",
   "account_access_enable_pitr": true,

@@ -210,10 +210,9 @@ print_provision_param_summary "RC" \
 # The association table belongs to the environment, with its own Terraform state.
 # Provision it before the RC, and retain it when this regional deployment is removed.
 if [[ "${TF_VAR_enable_installer_role_poc:-false}" == "true" ]]; then
-    if [[ "${TF_VAR_environment:-}" != "ephemeral" || -z "${TF_VAR_eph_prefix:-}" ||
-          ! "${TF_VAR_account_access_environment_id:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ ||
+    if [[ ! "${TF_VAR_account_access_environment_id:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ ||
           ! "${TF_VAR_account_access_table_region:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
-        echo "ERROR: installer-role PoC requires a unique ephemeral deployment, environment ID, and table hosting region" >&2
+        echo "ERROR: installer-role PoC requires a valid environment ID and table hosting region" >&2
         exit 1
     fi
 

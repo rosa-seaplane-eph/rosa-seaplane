@@ -795,18 +795,11 @@ class TestBuildContext:
             ctx = build_context(merged, env, "us-east-1", "")
             assert ctx["regional_cluster"]["enable_write_sre_tools"] is False
 
-    @pytest.mark.parametrize("environment", ["integration", "stage", "production"])
-    def test_installer_role_poc_rejected_outside_ephemeral(self, environment):
-        with pytest.raises(ValueError, match="isolated ephemeral"):
-            build_context(
-                {"regional_cluster": {"enable_installer_role_poc": True}},
-                environment, "us-east-1", "test1234",
-            )
-
-    def test_installer_role_poc_allows_unique_ephemeral(self):
+    @pytest.mark.parametrize("environment", ["integration", "stage", "production", "ephemeral"])
+    def test_installer_role_poc_has_no_environment_name_restriction(self, environment):
         ctx = build_context(
             {"regional_cluster": {"enable_installer_role_poc": True}},
-            "ephemeral", "us-east-1", "test1234",
+            environment, "us-east-1", "",
         )
         assert ctx["regional_cluster"]["enable_installer_role_poc"] is True
 
@@ -1934,7 +1927,8 @@ class TestMainIntegration:
             assert "registryRegion: ''" not in content
 
     @pytest.mark.parametrize("environment,enabled", [
-        ("ephemeral", True), ("ephemeral", False), ("integration", False), ("stage", False),
+        ("ephemeral", True), ("ephemeral", False),
+        ("integration", True), ("integration", False), ("stage", True), ("stage", False),
     ])
     def test_installer_role_appset_uses_poc_flag_and_bootstrap_identity(self, tmp_path, environment, enabled):
         defaults = load_yaml(PROJECT_ROOT / "config/defaults.yaml")
@@ -1953,6 +1947,9 @@ class TestMainIntegration:
             eph_prefix="test1234" if environment == "ephemeral" else "",
         )
         region = deploy / environment / "us-east-1"
+        inputs = load_yaml(region / "pipeline-regional-cluster-inputs/terraform.json")
+        expected_id = "ephemeral-test1234" if environment == "ephemeral" else environment
+        assert inputs["account_access_environment_id"] == expected_id
         rc = load_yaml(region / "argocd-bootstrap-regional-cluster/applicationset.yaml")
         values = rc["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]
         installer = values["platformApi"]["installerRole"]
@@ -3420,9 +3417,8 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         assert events == []
 
     @pytest.mark.parametrize("runtime", [
-        {"TF_VAR_environment": "stage"},
-        {"TF_VAR_eph_prefix": ""},
         {"TF_VAR_account_access_table_region": ""},
+        {"TF_VAR_account_access_environment_id": ""},
         {"TF_VAR_account_access_environment_id": "a" * 129},
         {"TF_VAR_account_access_environment_id": "_invalid"},
     ])
@@ -3439,6 +3435,18 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         }, TF_VAR_enable_installer_role_poc="false")
         assert result.returncode == 0, result.stderr
         assert events == []
+
+    @pytest.mark.parametrize("environment", ["integration", "stage"])
+    def test_standing_environment_provisions_without_ephemeral_prefix(self, tmp_path, environment):
+        result, events = self._prepare(tmp_path, {
+            "environment": environment,
+            "eph_prefix": "",
+            "account_access_environment_id": environment,
+            "enable_account_access_table_provisioning": True,
+        })
+        assert result.returncode == 0, result.stderr
+        assert f"account-access-dynamodb/{environment}.tfstate" in events[0]
+        assert result.stdout.splitlines()[-1] == f"result|arn:aws:dynamodb:us-west-2:111111111111:table/{environment}-account-access|us-east-1"
 
     def test_environment_id_accepts_api_supported_case_and_underscore(self, tmp_path):
         environment_id = "Env_" + "a" * 124

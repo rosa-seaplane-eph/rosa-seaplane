@@ -190,6 +190,13 @@ regional account and configured `account_access_table_region`. The unique
 lives at `account-access-dynamodb/<environment-id>.tfstate` in the owning
 deployment's regional Terraform state bucket, separately from RC state.
 
+The feature can also be enabled in standing environments such as integration or
+stage through their regional configuration. There, the environment ID defaults
+to the environment name, with no ephemeral prefix required. Select the table's
+hosting region and either supply an existing table ARN or explicitly enable
+table provisioning. The ID separates account assignments belonging to different
+environments; it does not restrict which environments may enable the feature.
+
 Platform API receives a dedicated Pod Identity role for its configured service
 account (`platform-api/platform-api-sa` by default). That role can read/write
 association records and assume only this deployment's installer jump role. The
