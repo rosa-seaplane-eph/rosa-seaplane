@@ -6,8 +6,8 @@
   "environment": "stage",
   "account_id": "ssm:///infra/us-east-1/mc01/account_id",
   "region": "us-east-1",
-  "alias": "mc01",
-  "management_id": "mc01",
+  "alias": "eph-58f2f3-mc01",
+  "management_id": "eph-58f2f3-mc01",
   "regional_aws_account_id": "ssm:///infra/us-east-1/rc/account_id",
   "image_registry_account_id": "ssm:///infra/image-registry/account_id",
   "zoa_lambda_image_tag": "1740bc6e5e853c98cc5bb0df75dbb836b115a261",
@@ -23,5 +23,6 @@
   "worker_node_ami_id": "ami-02c0be6b661d6caf5",
   "worker_node_root_volume_size": 50,
   "hcp_slot_count": 60,
+  "eph_prefix": "eph-58f2f3",
   "enable_bastion": true
 }
