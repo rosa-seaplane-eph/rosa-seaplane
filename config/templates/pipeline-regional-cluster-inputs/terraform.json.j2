@@ -9,8 +9,6 @@
   "region": "{{ aws_region }}",
   "deployment_name": "{{ deployment_name }}",
   "alias": "regional-{{ aws_region }}",
-  "enable_installer_role_poc": {{ regional_cluster.enable_installer_role_poc | default(false) | tojson }},
-  "enable_account_access_table_provisioning": {{ regional_cluster.enable_account_access_table_provisioning | default(false) | tojson }},
   "account_access_environment_id": {{ regional_cluster.account_access_environment_id | default('') | tojson }},
   "account_access_table_arn": {{ regional_cluster.account_access_table_arn | default('') | tojson }},
   "account_access_table_region": {{ regional_cluster.account_access_table_region | default('') | tojson }},

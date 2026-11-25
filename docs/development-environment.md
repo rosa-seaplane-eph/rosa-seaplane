@@ -174,28 +174,22 @@ make ephemeral-resync ID=<id>
 
 ### Installer-role PoC infrastructure
 
-Opt in to the installer-role PoC in `.ephemeral-env/defaults.yaml`:
+Installer-role infrastructure and API configuration are always provisioned on this
+PoC branch. No enablement override is needed.
 
-```yaml
-regional_cluster:
-  enable_installer_role_poc: true
-```
+When `account_access_table_arn` is empty, the regional pipeline provisions the
+environment's on-demand DynamoDB association table before the regional cluster.
+Table state lives at `account-access-dynamodb/<environment-id>.tfstate` in the
+owning deployment's regional Terraform state bucket, separately from RC state.
+The table hosting region defaults to the deployment region and can be overridden
+with `account_access_table_region`.
 
-Keep a region file such as `.ephemeral-env/us-east-1.yaml` as described above;
-the override directory requires both the defaults and a region configuration.
-
-The ephemeral defaults create one on-demand DynamoDB association table in the
-regional account and configured `account_access_table_region`. The unique
-`account_access_environment_id` defaults to `ephemeral-<eph_prefix>`. Table state
-lives at `account-access-dynamodb/<environment-id>.tfstate` in the owning
-deployment's regional Terraform state bucket, separately from RC state.
-
-The feature can also be enabled in standing environments such as integration or
-stage through their regional configuration. There, the environment ID defaults
-to the environment name, with no ephemeral prefix required. Select the table's
-hosting region and either supply an existing table ARN or explicitly enable
-table provisioning. The ID separates account assignments belonging to different
-environments; it does not restrict which environments may enable the feature.
+The unique `account_access_environment_id` defaults to `ephemeral-<eph_prefix>`
+for ephemeral environments and the environment name for standing environments.
+Additional regional consumers supply the owner's `account_access_table_arn`,
+`account_access_table_region`, and `account_access_environment_id`. An explicit
+ARN uses the existing table without provisioning another one. Keep the owner's
+configured ARN empty so subsequent runs continue managing its table state.
 
 Platform API receives a dedicated Pod Identity role for its configured service
 account (`platform-api/platform-api-sa` by default). That role can read/write
@@ -203,38 +197,29 @@ association records and assume only this deployment's installer jump role. The
 jump role can assume customer roles tagged `seaplane-access=true`. Terraform
 disables EKS session tags for this association so they do not propagate through
 the jump and customer roles. The workload trust is restricted to its AWS account
-and EKS cluster; the association selects the namespace and service account. Terraform
-exports the workload/jump ARNs and table ARN/region, and bootstrap writes
-`account_access_environment_id`, `installer_jump_role_arn`,
+and EKS cluster; the association selects the namespace and service account.
+Terraform exports the workload/jump ARNs and table ARN/region, and bootstrap
+writes `account_access_environment_id`, `installer_jump_role_arn`,
 `account_access_table_arn`, and `account_access_table_region` on ArgoCD's cluster
 identity secret. The regional ApplicationSet passes these values to
-`platformApi.installerRole` in the API chart. The same
-`enable_installer_role_poc` flag enables both the infrastructure and API
-configuration; no additional API enablement setting is required. The API/discovery
-region remains `global.aws_region`, independently of the table hosting region.
+`platformApi.installerRole` in the API chart.
 
-The API chart owns the ConfigMap, read-only mount, `INSTALLER_ROLE_ENABLED` and
-`INSTALLER_ROLE_CONFIG_FILE` variables, and pod checksum that restarts pods on
+The API chart creates the ConfigMap, read-only mount,
+`INSTALLER_ROLE_CONFIG_FILE` variable, and pod checksum that restarts pods on
 configuration changes. It defaults to format version `1`, trust-template version
 `"1"`, and `arn:aws:iam::aws:policy/service-role/ROSAInstallerPolicy`. Environment
 IDs must be 1–128 letters, digits, underscores, or hyphens and start with a letter
 or digit. Jump-role and table ARNs must use the commercial `aws` partition.
 
-Before deploying with the PoC enabled, pin the API chart revision and built image
-containing installer-role configuration support in
-`argocd/config/regional-cluster/platform-api/values.yaml`. Configuration delivery
-does not implement account-association storage or installer-role HTTP routes;
-those are later PoC steps.
+The API chart revision and built image must both contain the PoC's required
+installer-role configuration support. Their pins are in
+`argocd/config/regional-cluster/platform-api/values.yaml`.
 
-Additional regional consumers must set
-`enable_account_access_table_provisioning: false` and explicitly supply the
-owner's `account_access_table_arn`, `account_access_table_region`, and
-`account_access_environment_id`. Each deployment keeps its own workload and jump
-roles. Cross-account consumers also need their exact workload role ARNs added to
-the table owner's `account_access_consumer_role_arns`; same-account consumers
-need no table resource policy. Existing NAT routes and HTTPS egress support
-cross-region table access; the local DynamoDB gateway endpoint handles local
-traffic. No replicas are created.
+Each deployment keeps its own workload and jump roles. Cross-account consumers
+also need their exact workload role ARNs added to the table owner's
+`account_access_consumer_role_arns`; same-account consumers need no table resource
+policy. Existing NAT routes and HTTPS egress support cross-region table access;
+the local DynamoDB gateway endpoint handles local traffic. No replicas are created.
 
 Regional teardown preserves this shared table, including when the owning RC is
 removed. After **all** consumers and tests finish, remove their test associations

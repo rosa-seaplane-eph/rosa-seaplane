@@ -2,24 +2,13 @@
 # Regional Cluster Infrastructure Variables
 # =============================================================================
 
-variable "enable_installer_role_poc" {
-  description = "Provision Platform API workload identity and the installer jump role for the installer-role PoC."
-  type        = bool
-  default     = false
-
-  validation {
-    condition     = !var.enable_installer_role_poc || var.account_access_environment_id != ""
-    error_message = "The installer-role PoC requires account_access_environment_id."
-  }
-}
-
 variable "account_access_environment_id" {
   description = "Unique environment identifier shared by regional association-store consumers."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.account_access_environment_id == "" || can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", var.account_access_environment_id))
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", var.account_access_environment_id))
     error_message = "account_access_environment_id must be 1-128 letters, digits, underscores or hyphens, starting with a letter or digit."
   }
 }
@@ -30,7 +19,7 @@ variable "account_access_table_arn" {
   default     = ""
 
   validation {
-    condition     = !var.enable_installer_role_poc || can(regex("^arn:aws:dynamodb:${var.account_access_table_region}:[0-9]{12}:table/[A-Za-z0-9_.-]{3,255}$", var.account_access_table_arn))
+    condition     = can(regex("^arn:aws:dynamodb:${var.account_access_table_region}:[0-9]{12}:table/[A-Za-z0-9_.-]{3,255}$", var.account_access_table_arn))
     error_message = "The installer-role PoC requires a commercial AWS table ARN matching account_access_table_region."
   }
 }
@@ -41,7 +30,7 @@ variable "account_access_table_region" {
   default     = ""
 
   validation {
-    condition     = !var.enable_installer_role_poc || can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]+$", var.account_access_table_region))
+    condition     = can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]+$", var.account_access_table_region))
     error_message = "The installer-role PoC requires the table hosting region."
   }
 }

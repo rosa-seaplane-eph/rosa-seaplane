@@ -795,13 +795,6 @@ class TestBuildContext:
             ctx = build_context(merged, env, "us-east-1", "")
             assert ctx["regional_cluster"]["enable_write_sre_tools"] is False
 
-    @pytest.mark.parametrize("environment", ["integration", "stage", "production", "ephemeral"])
-    def test_installer_role_poc_has_no_environment_name_restriction(self, environment):
-        ctx = build_context(
-            {"regional_cluster": {"enable_installer_role_poc": True}},
-            environment, "us-east-1", "",
-        )
-        assert ctx["regional_cluster"]["enable_installer_role_poc"] is True
 
 
 # =============================================================================
@@ -1647,8 +1640,6 @@ class TestMainIntegration:
             tmp_path,
             global_defaults={
                 "regional_cluster": {
-                    "enable_installer_role_poc": True,
-                    "enable_account_access_table_provisioning": False,
                     "account_access_environment_id": "ephemeral-{{ eph_prefix }}",
                     "account_access_table_region": "us-west-2",
                     "account_access_table_arn": "arn:aws:dynamodb:us-west-2:111111111111:table/shared-account-access",
@@ -1673,8 +1664,6 @@ class TestMainIntegration:
         assert inputs["account_access_table_region"] == "us-west-2"
         assert inputs["account_access_table_arn"] == "arn:aws:dynamodb:us-west-2:111111111111:table/shared-account-access"
         assert inputs["account_access_environment_id"] == "ephemeral-test1234"
-        assert inputs["enable_installer_role_poc"] is True
-        assert inputs["enable_account_access_table_provisioning"] is False
         values = yaml.safe_load((region_dir / "argocd-values-regional-cluster.yaml").read_text())
         assert inputs["platform_api_namespace"] == values["platformApi"]["namespace"] == "api-test1234"
         assert inputs["platform_api_service_account"] == values["platformApi"]["serviceAccount"]["name"] == "test1234-api-sa"
@@ -1926,22 +1915,14 @@ class TestMainIntegration:
             assert "registryAccount: ''" not in content
             assert "registryRegion: ''" not in content
 
-    @pytest.mark.parametrize("environment,enabled", [
-        ("ephemeral", True), ("ephemeral", False),
-        ("integration", True), ("integration", False), ("stage", True), ("stage", False),
-    ])
-    def test_installer_role_appset_uses_poc_flag_and_bootstrap_identity(self, tmp_path, environment, enabled):
+    @pytest.mark.parametrize("environment", ["ephemeral", "integration", "stage"])
+    def test_installer_role_appset_always_uses_bootstrap_identity(self, tmp_path, environment):
         defaults = load_yaml(PROJECT_ROOT / "config/defaults.yaml")
         env_defaults = load_yaml(PROJECT_ROOT / "config" / environment / "defaults.yaml")
-        overrides = {
-            "regional_cluster": {"enable_installer_role_poc": enabled},
-            # A chart-value override cannot bypass the canonical infrastructure flag.
-            "applications": {"regional-cluster": {"platformApi": {"installerRole": {"enabled": True}}}},
-        }
         deploy = self._run_main(
             tmp_path, defaults,
             {environment: {
-                "defaults": deep_merge(env_defaults, overrides),
+                "defaults": env_defaults,
                 "regions": {"us-east-1": {"provision_mcs": {"mc01": {}}}},
             }},
             eph_prefix="test1234" if environment == "ephemeral" else "",
@@ -1950,11 +1931,11 @@ class TestMainIntegration:
         inputs = load_yaml(region / "pipeline-regional-cluster-inputs/terraform.json")
         expected_id = "ephemeral-test1234" if environment == "ephemeral" else environment
         assert inputs["account_access_environment_id"] == expected_id
+        assert inputs["account_access_table_region"] == "us-east-1"
         rc = load_yaml(region / "argocd-bootstrap-regional-cluster/applicationset.yaml")
         values = rc["spec"]["template"]["spec"]["sources"][0]["helm"]["valuesObject"]
         installer = values["platformApi"]["installerRole"]
         assert installer == {
-            "enabled": enabled,
             "environmentId": '{{ index .metadata.annotations "account_access_environment_id" | default "" }}',
             "jumpRoleArn": '{{ index .metadata.annotations "installer_jump_role_arn" | default "" }}',
             "accountAccess": {
@@ -3111,7 +3092,7 @@ class TestPlatformAPIChartWrapper:
         app = _resource(resources, "Application", "seaplane-api")
         assert app["metadata"]["name"] == "seaplane-api"
         source = app["spec"]["source"]
-        assert source["repoURL"] == "https://github.com/openshift-online/rosa-seaplane-api.git"
+        assert source["repoURL"] == "https://github.com/willkutler/rosa-hyperfleet-api.git"
         assert source["path"] == "seaplane-api/charts"
         revision = source["targetRevision"]
         assert len(revision) == 40 and set(revision) <= set("0123456789abcdef")
@@ -3128,12 +3109,11 @@ class TestPlatformAPIChartWrapper:
             "failureThreshold": 3,
         }
         assert child_values["global"]["aws_region"] == "us-east-1"
-        assert child_values["platformApi"]["installerRole"]["enabled"] is False
+        assert "enabled" not in child_values["platformApi"]["installerRole"]
         assert "seaplane" not in child_values
 
     def test_installer_role_runtime_values_are_forwarded_with_independent_regions(self, tmp_path):
         installer = {
-            "enabled": True,
             "environmentId": "Ephemeral_TEST-123",
             "jumpRoleArn": "arn:aws:iam::111111111111:role/us-east-1-test1234-installer-jump",
             "accountAccess": {
@@ -3308,8 +3288,6 @@ class TestAccountAccessProvisioning:
     def _prepare(self, tmp_path, config=None, **runtime):
         inputs = json.loads((PROJECT_ROOT / "deploy/ephemeral/us-east-1/pipeline-regional-cluster-inputs/terraform.json").read_text())
         inputs.update({
-            "enable_installer_role_poc": True,
-            "enable_account_access_table_provisioning": False,
             "account_access_environment_id": "ephemeral-test1234",
             "account_access_table_region": "us-west-2",
             "account_access_table_arn": "",
@@ -3378,7 +3356,6 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
 
     def test_owner_provisions_separate_state_without_changing_service_region(self, tmp_path):
         result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
             "account_access_enable_pitr": False,
         })
         assert result.returncode == 0, result.stderr
@@ -3389,9 +3366,7 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         assert result.stdout.splitlines()[-1] == "result|arn:aws:dynamodb:us-west-2:111111111111:table/ephemeral-test1234-account-access|us-east-1"
 
     def test_regional_destroy_preserves_shared_table(self, tmp_path):
-        result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
-        }, IS_DESTROY="true")
+        result, events = self._prepare(tmp_path, IS_DESTROY="true")
         assert result.returncode == 0, result.stderr
         assert events == []
 
@@ -3402,20 +3377,6 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         assert events == []
         assert result.stdout.splitlines()[-1] == f"result|{table}|us-east-1"
 
-    def test_consumer_missing_table_fails(self, tmp_path):
-        result, events = self._prepare(tmp_path)
-        assert result.returncode != 0
-        assert "requires account_access_table_arn" in result.stderr
-        assert events == []
-
-    def test_owner_rejects_another_tables_arn(self, tmp_path):
-        result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
-        }, TF_VAR_account_access_table_arn="arn:aws:dynamodb:us-west-2:222222222222:table/another-table")
-        assert result.returncode != 0
-        assert "owner configuration disagrees" in result.stderr
-        assert events == []
-
     @pytest.mark.parametrize("runtime", [
         {"TF_VAR_account_access_table_region": ""},
         {"TF_VAR_account_access_environment_id": ""},
@@ -3423,17 +3384,8 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
         {"TF_VAR_account_access_environment_id": "_invalid"},
     ])
     def test_invalid_poc_context_fails_before_table_provisioning(self, tmp_path, runtime):
-        result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
-        }, **runtime)
+        result, events = self._prepare(tmp_path, **runtime)
         assert result.returncode != 0
-        assert events == []
-
-    def test_disabled_poc_skips_provisioning(self, tmp_path):
-        result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
-        }, TF_VAR_enable_installer_role_poc="false")
-        assert result.returncode == 0, result.stderr
         assert events == []
 
     @pytest.mark.parametrize("environment", ["integration", "stage"])
@@ -3442,7 +3394,6 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
             "environment": environment,
             "eph_prefix": "",
             "account_access_environment_id": environment,
-            "enable_account_access_table_provisioning": True,
         })
         assert result.returncode == 0, result.stderr
         assert f"account-access-dynamodb/{environment}.tfstate" in events[0]
@@ -3451,7 +3402,6 @@ printf 'result|%s|%s\\n' "$TF_VAR_account_access_table_arn" "$TF_VAR_region"
     def test_environment_id_accepts_api_supported_case_and_underscore(self, tmp_path):
         environment_id = "Env_" + "a" * 124
         result, events = self._prepare(tmp_path, {
-            "enable_account_access_table_provisioning": True,
             "account_access_environment_id": environment_id,
         })
         assert result.returncode == 0, result.stderr

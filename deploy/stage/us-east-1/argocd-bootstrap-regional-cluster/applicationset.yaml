@@ -87,9 +87,7 @@ spec:
                   oidcIssuerBaseURL: 'https://{{ .metadata.annotations.oidc_cloudfront_domain }}'
               rateLimit:
                 redisEndpoint: '{{ .metadata.annotations.redis_endpoint }}'
-              # Use the same flag as the workload/jump roles and association store.
               installerRole:
-                enabled: false
                 environmentId: '{{ index .metadata.annotations "account_access_environment_id" | default "" }}'
                 jumpRoleArn: '{{ index .metadata.annotations "installer_jump_role_arn" | default "" }}'
                 accountAccess:

@@ -342,10 +342,10 @@ module "ecs_bootstrap" {
   rc_aws_account_id = var.target_account_id
   redis_endpoint    = var.enable_rate_limit_redis ? "${module.elasticache_valkey[0].endpoint}:${module.elasticache_valkey[0].port}" : ""
 
-  account_access_environment_id = var.enable_installer_role_poc ? var.account_access_environment_id : ""
-  installer_jump_role_arn       = var.enable_installer_role_poc ? aws_iam_role.installer_jump[0].arn : ""
-  account_access_table_arn      = var.enable_installer_role_poc ? var.account_access_table_arn : ""
-  account_access_table_region   = var.enable_installer_role_poc ? var.account_access_table_region : ""
+  account_access_environment_id = var.account_access_environment_id
+  installer_jump_role_arn       = aws_iam_role.installer_jump.arn
+  account_access_table_arn      = var.account_access_table_arn
+  account_access_table_region   = var.account_access_table_region
 
   # ZOA read-only IAM DB role provisioning (runs psql during bootstrap).
   # The RC always has seaplane-db, so enable it unconditionally here. This
@@ -740,8 +740,7 @@ locals {
 }
 
 resource "aws_iam_role" "platform_api" {
-  count = var.enable_installer_role_poc ? 1 : 0
-  name  = "${var.deployment_name}-platform-api"
+  name = "${var.deployment_name}-platform-api"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -764,11 +763,10 @@ resource "aws_iam_role" "platform_api" {
 }
 
 resource "aws_eks_pod_identity_association" "platform_api" {
-  count           = var.enable_installer_role_poc ? 1 : 0
   cluster_name    = module.regional_cluster.cluster_name
   namespace       = var.platform_api_namespace
   service_account = var.platform_api_service_account
-  role_arn        = aws_iam_role.platform_api[0].arn
+  role_arn        = aws_iam_role.platform_api.arn
 
   # Keep EKS's transitive session tags out of the two-hop customer role chain.
   # The PoC's jump/customer trust permits AssumeRole without TagSession.
@@ -778,9 +776,8 @@ resource "aws_eks_pod_identity_association" "platform_api" {
 }
 
 resource "aws_iam_role_policy" "platform_api_account_access" {
-  count = var.enable_installer_role_poc ? 1 : 0
-  name  = "account-access"
-  role  = aws_iam_role.platform_api[0].id
+  name = "account-access"
+  role = aws_iam_role.platform_api.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -795,14 +792,13 @@ resource "aws_iam_role_policy" "platform_api_account_access" {
         Sid      = "AssumeInstallerJumpRole"
         Effect   = "Allow"
         Action   = "sts:AssumeRole"
-        Resource = aws_iam_role.installer_jump[0].arn
+        Resource = aws_iam_role.installer_jump.arn
       },
     ]
   })
 }
 
 resource "aws_iam_role" "installer_jump" {
-  count                = var.enable_installer_role_poc ? 1 : 0
   name                 = "${var.deployment_name}-installer-jump"
   max_session_duration = 3600
 
@@ -810,7 +806,7 @@ resource "aws_iam_role" "installer_jump" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { AWS = aws_iam_role.platform_api[0].arn }
+      Principal = { AWS = aws_iam_role.platform_api.arn }
       Action    = "sts:AssumeRole"
     }]
   })
@@ -819,9 +815,8 @@ resource "aws_iam_role" "installer_jump" {
 }
 
 resource "aws_iam_role_policy" "installer_jump" {
-  count = var.enable_installer_role_poc ? 1 : 0
-  name  = "assume-customer-installer"
-  role  = aws_iam_role.installer_jump[0].id
+  name = "assume-customer-installer"
+  role = aws_iam_role.installer_jump.id
 
   policy = jsonencode({
     Version = "2012-10-17"

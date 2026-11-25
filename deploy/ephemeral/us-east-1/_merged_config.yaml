@@ -107,20 +107,13 @@ worker_node_ami:
 worker_node_root_volume_size: 50
 
 regional_cluster:
-  # @doc regional_cluster.enable_installer_role_poc Enable installer-role PoC AWS identities, store access, and API configuration together. Disabled by default.
-  # @used-by regional_cluster.enable_installer_role_poc argocd-bootstrap/applicationset.yaml.j2
-  # @used-by regional_cluster.enable_installer_role_poc pipeline-regional-cluster-inputs/terraform.json.j2
-  enable_installer_role_poc: false
-  # @doc regional_cluster.enable_account_access_table_provisioning Own the single association table in separate environment state. Additional regional consumers must leave this disabled and supply its ARN/region.
-  # @used-by regional_cluster.enable_account_access_table_provisioning pipeline-regional-cluster-inputs/terraform.json.j2
-  enable_account_access_table_provisioning: true
   # @doc regional_cluster.account_access_environment_id Stable environment identifier shared by regional consumers. Defaults to the environment name; ephemeral deployments override it with their unique prefix.
   # @used-by regional_cluster.account_access_environment_id pipeline-regional-cluster-inputs/terraform.json.j2
   account_access_environment_id: "ephemeral-{{ eph_prefix }}"
-  # @doc regional_cluster.account_access_table_arn Explicit association table ARN for consumers. The owning deployment may leave it empty to derive its environment-specific ARN.
+  # @doc regional_cluster.account_access_table_arn Existing association table ARN for consumers. Leave empty to provision the environment-owned table in separate Terraform state.
   # @used-by regional_cluster.account_access_table_arn pipeline-regional-cluster-inputs/terraform.json.j2
   account_access_table_arn: ""
-  # @doc regional_cluster.account_access_table_region Table hosting region, independent of the API/discovery region.
+  # @doc regional_cluster.account_access_table_region Table hosting region, independent of the API/discovery region. Defaults to the deployment region.
   # @used-by regional_cluster.account_access_table_region pipeline-regional-cluster-inputs/terraform.json.j2
   account_access_table_region: "{{ aws_region }}"
   # @doc regional_cluster.account_access_enable_pitr Enable point-in-time recovery for the environment-owned association table.

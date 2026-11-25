@@ -50,7 +50,7 @@ fi
 
 # Terraform configuration values come from the rendered deployment JSON.
 tf_export_json_vars "${DEPLOY_CONFIG_FILE}" \
-    enable_installer_role_poc account_access_environment_id \
+    account_access_environment_id \
     account_access_table_arn account_access_table_region \
     platform_api_namespace platform_api_service_account \
     regional_id environment deployment_name app_code service_phase cost_center \
@@ -209,40 +209,30 @@ print_provision_param_summary "RC" \
 
 # The association table belongs to the environment, with its own Terraform state.
 # Provision it before the RC, and retain it when this regional deployment is removed.
-if [[ "${TF_VAR_enable_installer_role_poc:-false}" == "true" ]]; then
-    if [[ ! "${TF_VAR_account_access_environment_id:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ ||
-          ! "${TF_VAR_account_access_table_region:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
-        echo "ERROR: installer-role PoC requires a valid environment ID and table hosting region" >&2
-        exit 1
-    fi
+if [[ ! "${TF_VAR_account_access_environment_id:-}" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$ ||
+      ! "${TF_VAR_account_access_table_region:-}" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]]; then
+    echo "ERROR: installer-role PoC requires a valid environment ID and table hosting region" >&2
+    exit 1
+fi
 
-    _ACCOUNT_ACCESS_PROVISION_TABLE=$(jq -r '.enable_account_access_table_provisioning // false' "$DEPLOY_CONFIG_FILE")
-    if [[ "$_ACCOUNT_ACCESS_PROVISION_TABLE" == "true" ]]; then
-        _ACCOUNT_ACCESS_EXPECTED_ARN="arn:aws:dynamodb:${TF_VAR_account_access_table_region}:${TARGET_ACCOUNT_ID}:table/${TF_VAR_account_access_environment_id}-account-access"
-        if [[ -n "${TF_VAR_account_access_table_arn:-}" && "$TF_VAR_account_access_table_arn" != "$_ACCOUNT_ACCESS_EXPECTED_ARN" ]]; then
-            echo "ERROR: table owner configuration disagrees with expected ARN $_ACCOUNT_ACCESS_EXPECTED_ARN" >&2
-            exit 1
-        fi
-        export TF_VAR_account_access_table_arn="$_ACCOUNT_ACCESS_EXPECTED_ARN"
+# An explicit ARN consumes an existing table. With no ARN, provision the
+# environment's table and derive its ARN only for this pipeline invocation.
+if [[ -z "${TF_VAR_account_access_table_arn:-}" ]]; then
+    export TF_VAR_account_access_table_arn="arn:aws:dynamodb:${TF_VAR_account_access_table_region}:${TARGET_ACCOUNT_ID}:table/${TF_VAR_account_access_environment_id}-account-access"
 
-        # An ordinary regional destroy NEVER destroys the environment-owned table.
-        # Final table cleanup is a separate explicit Terraform operation.
-        if [[ "${IS_DESTROY:-false}" != "true" ]]; then
-            (
-                export TF_VAR_region="$TF_VAR_account_access_table_region"
-                tf_export_json_vars "$DEPLOY_CONFIG_FILE" \
-                    account_access_enable_pitr account_access_deletion_protection \
-                    account_access_consumer_role_arns
-                tf_init_backend terraform/config/account-access-dynamodb-provisioning \
-                    "$TF_STATE_BUCKET" \
-                    "account-access-dynamodb/${TF_VAR_account_access_environment_id}.tfstate" \
-                    "$TF_STATE_REGION"
-                tf_apply terraform/config/account-access-dynamodb-provisioning apply
-            )
-        fi
-    elif [[ -z "${TF_VAR_account_access_table_arn:-}" ]]; then
-        echo "ERROR: a consuming deployment requires account_access_table_arn; it must not create another table" >&2
-        exit 1
+    # Final table cleanup is separate from regional teardown.
+    if [[ "${IS_DESTROY:-false}" != "true" ]]; then
+        (
+            export TF_VAR_region="$TF_VAR_account_access_table_region"
+            tf_export_json_vars "$DEPLOY_CONFIG_FILE" \
+                account_access_enable_pitr account_access_deletion_protection \
+                account_access_consumer_role_arns
+            tf_init_backend terraform/config/account-access-dynamodb-provisioning \
+                "$TF_STATE_BUCKET" \
+                "account-access-dynamodb/${TF_VAR_account_access_environment_id}.tfstate" \
+                "$TF_STATE_REGION"
+            tf_apply terraform/config/account-access-dynamodb-provisioning apply
+        )
     fi
 fi
 

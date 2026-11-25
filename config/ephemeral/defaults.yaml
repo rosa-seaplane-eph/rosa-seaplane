@@ -51,9 +51,7 @@ dns:
   shard0_account_id: "ssm:///infra/{{ aws_region }}/dns00/account_id"
 
 regional_cluster:
-  # Infrastructure remains opt-in via enable_installer_role_poc. The owning
-  # ephemeral deployment uses its unique prefix and keeps table state separate.
-  enable_account_access_table_provisioning: true
+  # Each ephemeral environment owns a table in separate Terraform state.
   account_access_environment_id: "ephemeral-{{ eph_prefix }}"
   account_access_table_region: "{{ aws_region }}"
   account_access_enable_pitr: false

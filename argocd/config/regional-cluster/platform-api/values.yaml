@@ -85,11 +85,9 @@ platformApi:
       policies: []
       attachments: []
 
-  # The API chart creates and mounts the installer-role ConfigMap. ApplicationSet
-  # supplies runtime identity/table values and derives enabled from the existing
-  # regional_cluster.enable_installer_role_poc flag.
+  # The API chart always creates and mounts the installer-role ConfigMap.
+  # ApplicationSet supplies the runtime identity and table values.
   installerRole:
-    enabled: false
     formatVersion: 1
     environmentId: ""
     jumpRoleArn: ""
@@ -182,8 +180,8 @@ seaplane:
   project: default
 
   source:
-    repoURL: https://github.com/openshift-online/rosa-seaplane-api.git
-    targetRevision: cc51c40da14cba95daf2f7ae64c01950a7a02a10
+    repoURL: https://github.com/willkutler/rosa-hyperfleet-api.git
+    targetRevision: 1815e670bb69fd275e028ee4d9eaf783f025e813
     path: seaplane-api/charts
 
   syncPolicy:
