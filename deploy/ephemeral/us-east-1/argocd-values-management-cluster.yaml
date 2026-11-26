@@ -32,6 +32,6 @@ hypershift:
     name: hypershift-mc-us-east-1
     region: us-east-1
   externalDns:
-    domain: us-east-1.eph-dev0.rosa.devshift.org
+    domain: us-east-1-eph-0d065b5a.eph-dev0.rosa.devshift.org
   ecrMirror:
     registryOverrides: ''
