@@ -89,10 +89,8 @@ resource "aws_lambda_function" "access" {
       EXEC_CREDENTIAL_DURATION_SECONDS = "3600"
       SESSION_MAX_DURATION_HOURS       = tostring(var.session_max_duration_hours)
       SESSION_IDLE_TIMEOUT_SECONDS     = tostring(var.session_idle_timeout_seconds)
-      }, var.breakglass_table_name != "" ? {
-      BREAKGLASS_TABLE = var.breakglass_table_name
-      } : {},
-    )
+      BREAKGLASS_TABLE                 = var.breakglass_table_name
+    })
   }
 
   tags = merge(local.common_tags, {
@@ -258,8 +256,6 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
             "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}",
           ]
         },
-      ],
-      var.breakglass_table_name != "" ? [
         {
           Sid    = "BreakglassReadWrite"
           Effect = "Allow"
@@ -275,7 +271,7 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
             "arn:aws:dynamodb:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:table/${var.breakglass_table_name}/index/*",
           ]
         },
-      ] : [],
+      ]
     )
   })
 }

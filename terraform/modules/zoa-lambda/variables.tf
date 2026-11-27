@@ -226,25 +226,23 @@ variable "dynamodb_ttl_days" {
 }
 
 variable "sessions_table_name" {
-  description = "DynamoDB table name for ZOA boundary sessions. Set when boundary is enabled — required for the reaper (worker) and identity bridge (api)."
+  description = "DynamoDB table name for ZOA boundary sessions (identity bridge on API, reaper on worker)."
   type        = string
-  default     = ""
 }
 
 variable "breakglass_table_name" {
-  description = "DynamoDB table name for ZOA break-glass requests. Enables BREAKGLASS_TABLE on API and worker Lambdas."
+  description = "DynamoDB table name for ZOA break-glass requests."
   type        = string
-  default     = ""
 }
 
 variable "session_idle_timeout_seconds" {
-  description = "Idle window (seconds) before the Worker idle reaper stops an active boundary session (SESSION_IDLE_TIMEOUT_SECONDS). Used when sessions_table_name is set. Stale creating uses session_stale_creating_seconds."
+  description = "Idle window (seconds) before the Worker idle reaper stops an active boundary session (SESSION_IDLE_TIMEOUT_SECONDS). Stale creating uses session_stale_creating_seconds."
   type        = number
   default     = 3600
 }
 
 variable "session_stale_creating_seconds" {
-  description = "How long a boundary session may remain in creating before the worker reaper terminates the row (and stops ECS if task_arn is set). Used when sessions_table_name is set."
+  description = "How long a boundary session may remain in creating before the worker reaper terminates the row (and stops ECS if task_arn is set)."
   type        = number
   default     = 900
 

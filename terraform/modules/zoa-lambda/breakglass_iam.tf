@@ -3,8 +3,6 @@
 # Elevated: PowerUserAccess + explicit Deny on ZOA S3/Dynamo data and KMS destruction.
 
 locals {
-  enable_breakglass = var.breakglass_table_name != ""
-
   # ZOA DynamoDB + S3 artifact data live in the RC data account (MC passes cross-account ARNs).
   zoa_data_account_id = coalesce(
     try(split(":", var.kms_key_arn)[4], null),
@@ -36,8 +34,7 @@ locals {
 }
 
 resource "aws_iam_role" "zoa_bg_aws_read" {
-  count = local.enable_breakglass ? 1 : 0
-  name  = "${local.function_prefix}-bg-aws-read"
+  name = "${local.function_prefix}-bg-aws-read"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -52,14 +49,12 @@ resource "aws_iam_role" "zoa_bg_aws_read" {
 }
 
 resource "aws_iam_role_policy_attachment" "zoa_bg_aws_read" {
-  count      = local.enable_breakglass ? 1 : 0
-  role       = aws_iam_role.zoa_bg_aws_read[0].name
+  role       = aws_iam_role.zoa_bg_aws_read.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
 resource "aws_iam_role" "zoa_bg_aws_write" {
-  count = local.enable_breakglass ? 1 : 0
-  name  = "${local.function_prefix}-bg-aws-write"
+  name = "${local.function_prefix}-bg-aws-write"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -74,15 +69,14 @@ resource "aws_iam_role" "zoa_bg_aws_write" {
 }
 
 resource "aws_iam_role_policy_attachment" "zoa_bg_aws_write_readonly" {
-  count      = local.enable_breakglass ? 1 : 0
-  role       = aws_iam_role.zoa_bg_aws_write[0].name
+  role       = aws_iam_role.zoa_bg_aws_write.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
 resource "aws_iam_role_policy" "zoa_bg_aws_write_mutations" {
-  count = local.enable_breakglass && local.breakglass_aws_write_state_mutations ? 1 : 0
+  count = local.breakglass_aws_write_state_mutations ? 1 : 0
   name  = "breakglass-write-mutations"
-  role  = aws_iam_role.zoa_bg_aws_write[0].id
+  role  = aws_iam_role.zoa_bg_aws_write.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -102,8 +96,7 @@ resource "aws_iam_role_policy" "zoa_bg_aws_write_mutations" {
 }
 
 resource "aws_iam_role" "zoa_bg_aws_elevated" {
-  count = local.enable_breakglass ? 1 : 0
-  name  = "${local.function_prefix}-bg-aws-elevated"
+  name = "${local.function_prefix}-bg-aws-elevated"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -118,8 +111,7 @@ resource "aws_iam_role" "zoa_bg_aws_elevated" {
 }
 
 resource "aws_iam_role_policy_attachment" "zoa_bg_aws_elevated_poweruser" {
-  count      = local.enable_breakglass ? 1 : 0
-  role       = aws_iam_role.zoa_bg_aws_elevated[0].name
+  role       = aws_iam_role.zoa_bg_aws_elevated.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
 
@@ -127,9 +119,8 @@ resource "aws_iam_role_policy_attachment" "zoa_bg_aws_elevated_poweruser" {
 # dynamodb:UpdateTable is table/config (capacity, GSIs) — not row writes; item APIs are denied above.
 # MC elevated uses PowerUser in the MC account; RC-centric denies use ARNs from vars (cross-account where needed).
 resource "aws_iam_role_policy" "zoa_bg_aws_elevated_zoa_guards" {
-  count = local.enable_breakglass ? 1 : 0
-  name  = "breakglass-elevated-zoa-immutability"
-  role  = aws_iam_role.zoa_bg_aws_elevated[0].id
+  name = "breakglass-elevated-zoa-immutability"
+  role = aws_iam_role.zoa_bg_aws_elevated.id
 
   policy = jsonencode({
     Version = "2012-10-17"

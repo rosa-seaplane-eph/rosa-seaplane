@@ -16,15 +16,13 @@ variable "image_uri" {
 }
 
 variable "sessions_table_name" {
-  description = "Name of the DynamoDB boundary-sessions table."
+  description = "Name of the DynamoDB boundary-sessions table (from module.zoa; required)."
   type        = string
-  default     = "boundary-sessions"
 }
 
 variable "breakglass_table_name" {
   description = "DynamoDB table for ZOA break-glass requests (laptop approve/reject)."
   type        = string
-  default     = ""
 }
 
 variable "targets_ssm_prefix" {

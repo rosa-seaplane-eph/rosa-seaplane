@@ -89,7 +89,7 @@ All deadlines are tunable via environment variables without code change. For asy
 
 ## Boundary session reaper (Worker)
 
-When `sessions_table_name` is set, the Worker **`reaper`** route (EventBridge, typically every 5 minutes) enforces three policies in order: **deadline**, **stale `creating`**, **idle**. Behavior and `stop_reason` values: [rosa-seaplane-zoa session reaper](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/boundary/session-reaper.md).
+The Worker **`reaper`** route (EventBridge, typically every 5 minutes) enforces three policies in order: **deadline**, **stale `creating`**, **idle**. Behavior and `stop_reason` values: [rosa-seaplane-zoa session reaper](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/boundary/session-reaper.md).
 
 | Module input (`variables.tf`)    | Worker Lambda env                | Source in `config/defaults.yaml` (regional_cluster) |
 | -------------------------------- | -------------------------------- | --------------------------------------------------- |

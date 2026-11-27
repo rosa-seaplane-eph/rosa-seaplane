@@ -48,22 +48,18 @@ locals {
     MAX_CONCURRENT_PER_TARGET         = tostring(var.max_concurrent_per_target)
     ASYNC_SCHEDULING_OVERHEAD_SECONDS = tostring(var.async_scheduling_overhead_seconds)
     LOG_LEVEL                         = var.log_level
+    SESSIONS_TABLE                    = var.sessions_table_name
+    SESSION_IDLE_TIMEOUT_SECONDS      = tostring(var.session_idle_timeout_seconds)
+    SESSION_STALE_CREATING_SECONDS    = tostring(var.session_stale_creating_seconds)
+    BREAKGLASS_TABLE                  = var.breakglass_table_name
+    BREAKGLASS_AWS_READ_ROLE_ARN      = aws_iam_role.zoa_bg_aws_read.arn
+    BREAKGLASS_AWS_WRITE_ROLE_ARN     = aws_iam_role.zoa_bg_aws_write.arn
+    BREAKGLASS_AWS_ELEVATED_ROLE_ARN  = aws_iam_role.zoa_bg_aws_elevated.arn
     }, var.data_access_role_arn != "" ? { DATA_STORE_ROLE_ARN = var.data_access_role_arn } : {},
     var.seaplane_db_endpoint != "" ? {
       SEAPLANE_DB_ENDPOINT = var.seaplane_db_endpoint
       SEAPLANE_DB_NAME     = var.seaplane_db_name
       SEAPLANE_DB_USERNAME = var.seaplane_db_username
-    } : {},
-    var.sessions_table_name != "" ? {
-      SESSIONS_TABLE                 = var.sessions_table_name
-      SESSION_IDLE_TIMEOUT_SECONDS   = tostring(var.session_idle_timeout_seconds)
-      SESSION_STALE_CREATING_SECONDS = tostring(var.session_stale_creating_seconds)
-    } : {},
-    var.breakglass_table_name != "" ? {
-      BREAKGLASS_TABLE                 = var.breakglass_table_name
-      BREAKGLASS_AWS_READ_ROLE_ARN     = aws_iam_role.zoa_bg_aws_read[0].arn
-      BREAKGLASS_AWS_WRITE_ROLE_ARN    = aws_iam_role.zoa_bg_aws_write[0].arn
-      BREAKGLASS_AWS_ELEVATED_ROLE_ARN = aws_iam_role.zoa_bg_aws_elevated[0].arn
     } : {},
   )
 
@@ -126,22 +122,16 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
         "dynamodb:Query",
         "dynamodb:DescribeTable",
       ]
-      Resource = concat(
-        [
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}/index/*",
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}/index/*",
-        ],
-        var.sessions_table_name != "" ? [
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}/index/*",
-        ] : [],
-        var.breakglass_table_name != "" ? [
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.breakglass_table_name}",
-          "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.breakglass_table_name}/index/*",
-        ] : [],
-      )
+      Resource = [
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.dynamodb_table_name}/index/*",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.audit_table_name}/index/*",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.sessions_table_name}/index/*",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.breakglass_table_name}",
+        "arn:aws:dynamodb:${data.aws_region.current.region}:*:table/${var.breakglass_table_name}/index/*",
+      ]
     }]
   })
 }
@@ -221,19 +211,15 @@ resource "aws_iam_role_policy" "lambda_sts" {
     Statement = [{
       Effect = "Allow"
       Action = "sts:AssumeRole"
-      Resource = compact(concat(
-        [
-          var.uploader_role_arn,
-          aws_iam_role.zoa_aws_read.arn,
-          aws_iam_role.zoa_aws_write.arn,
-          var.data_access_role_arn,
-        ],
-        local.enable_breakglass ? [
-          aws_iam_role.zoa_bg_aws_read[0].arn,
-          aws_iam_role.zoa_bg_aws_write[0].arn,
-          aws_iam_role.zoa_bg_aws_elevated[0].arn,
-        ] : [],
-      ))
+      Resource = compact([
+        var.uploader_role_arn,
+        aws_iam_role.zoa_aws_read.arn,
+        aws_iam_role.zoa_aws_write.arn,
+        var.data_access_role_arn,
+        aws_iam_role.zoa_bg_aws_read.arn,
+        aws_iam_role.zoa_bg_aws_write.arn,
+        aws_iam_role.zoa_bg_aws_elevated.arn,
+      ])
     }]
   })
 }
@@ -662,9 +648,8 @@ resource "aws_iam_role_policy" "lambda_boundary_ecs_reaper" {
 
 # Worker reaper idle: correlate ECS Exec sessions (SSM) and terminal activity (CloudWatch).
 resource "aws_iam_role_policy" "lambda_boundary_reaper_idle" {
-  count = var.sessions_table_name != "" ? 1 : 0
-  name  = "${local.function_prefix}-boundary-reaper-idle"
-  role  = aws_iam_role.lambda.id
+  name = "${local.function_prefix}-boundary-reaper-idle"
+  role = aws_iam_role.lambda.id
 
   policy = jsonencode({
     Version = "2012-10-17"
