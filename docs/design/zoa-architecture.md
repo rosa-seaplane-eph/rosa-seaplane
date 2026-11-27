@@ -1,6 +1,6 @@
 # Zero Operator Access (ZOA) — Architecture
 
-**Last Updated Date**: 2026-10-23
+**Last Updated Date**: 2026-11-27
 
 ## Summary
 
@@ -21,13 +21,13 @@ ZOA is independent of the Regional Cluster's Platform API or any Kubernetes work
 
 ### Operator model (three pillars)
 
-Production work is **boundary-first**: every path begins on the laptop with session management, continues in an ephemeral **boundary** task (ECS Exec), and uses **Trusted Actions** for reads and changes to fleet state. There is no supported workflow that grants standing cluster credentials on the laptop.
+Production work is **boundary-first**: every path begins on the laptop with session management, continues in an ephemeral **boundary** task (ECS Exec), then uses **Trusted Actions** for repeatable automation and **break-glass** for scoped stock `kubectl` / `aws` when a TA is not the right tool. There is no supported workflow that grants standing cluster credentials on the laptop.
 
-| Pillar              | Status  | Platform role                                                                                                                                                                                                                                                                       |
-| ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Boundary**        | Shipped | Audited entry point — `zoa session start` / join; tools and shell in target VPC                                                                                                                                                                                                     |
-| **Trusted Actions** | Shipped | Declarative, RBAC-scoped operations via `zoa run` **from inside the boundary**                                                                                                                                                                                                      |
-| **Break-glass**     | In progress | Scoped emergency `kubectl` / AWS from the boundary; operator docs and approval policy in [rosa-seaplane-zoa `docs/break-glass/`](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/break-glass/) and [approval-workflow.md](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/approval-workflow.md) |
+| Pillar              | Status  | Platform role                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Boundary**        | Shipped | Audited entry point — `zoa session start` / join; tools and shell in target VPC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Trusted Actions** | Shipped | Declarative, RBAC-scoped operations via `zoa run` **from inside the boundary**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Break-glass**     | Shipped | Scoped emergency `kubectl` / AWS from the boundary only (`request` → `activate` → stock CLIs); profiles in `pkg/breakglass/`. Operator docs: [break-glass](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/break-glass/), [credential architecture](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/break-glass/credential-architecture.md), [approval workflow](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/approval-workflow.md) (v1 auto-approve on API; peer approve on laptop reserved for a future epic) |
 
 **Session path** (operator access): laptop → **Access** Lambda → boundary ECS → optional **TA path** below.
 
@@ -41,11 +41,11 @@ The pillars above map onto AWS as follows. **Access** is regional (RC account, n
 
 Three **Lambda personalities** from one container image (`zoa-lambda`), selected by `HANDLER_MODE`:
 
-| Lambda     | Where          | Invoke Mode         | Trigger                             | Purpose                                                                      | Timeout |
-| ---------- | -------------- | ------------------- | ----------------------------------- | ---------------------------------------------------------------------------- | ------- |
-| **Access** | RC (no VPC)    | `RESPONSE_STREAM`   | Function URL (IAM auth)             | Boundary session lifecycle; Central deployment discovery; RC target registry | 30s     |
-| **API**    | Per target VPC | `RESPONSE_STREAM`   | Function URL (IAM auth)             | `zoa run`, sync TAs, streaming responses (from boundary only)                | 300s    |
-| **Worker** | Per target VPC | _(no Function URL)_ | EventBridge Scheduler + self-invoke | Reconciler (1m), GC (5m), boundary reaper (5m); async Job lifecycle          | 300s    |
+| Lambda     | Where          | Invoke Mode         | Trigger                             | Purpose                                                                                      | Timeout |
+| ---------- | -------------- | ------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- | ------- |
+| **Access** | RC (no VPC)    | `RESPONSE_STREAM`   | Function URL (IAM auth)             | Boundary session lifecycle; Central deployment discovery; RC target registry                 | 30s     |
+| **API**    | Per target VPC | `RESPONSE_STREAM`   | Function URL (IAM auth)             | `zoa run`, sync TAs, streaming responses (from boundary only)                                | 300s    |
+| **Worker** | Per target VPC | _(no Function URL)_ | EventBridge Scheduler + self-invoke | Reconciler (1m): TA + break-glass lifecycle; GC (5m): TA + BG hygiene; reaper (5m): sessions | 300s    |
 
 **Access** (`modules/zoa-access`) serves short HTTP requests from the laptop; `ecs:RunTask` is asynchronous. It resolves **targets** from RC SSM (`TARGETS_SSM_PREFIX`, same `/zoa/targets/<deployment>/…` tree as session start) and **deployments** from Central SSM (`/zoa/deployments/<deployment_name>`). Session **duration**, **stale creating**, and **idle** limits are enforced on the boundary ECS task and the Worker reaper — not by keeping an Access invocation open. **API** and **Worker** (`modules/zoa-lambda`) share VPC networking with the boundary task in that cluster. Reserved concurrency and other operational defaults are environment configuration (not repeated here); see [Configuration](#configuration).
 
@@ -67,7 +67,7 @@ graph TD
 
     subgraph rc["RC Account"]
         ACCESS["ZOA Access Lambda<br/>(Function URL, IAM)"]
-        STATE["ZOA state<br/><br/>DynamoDB · sessions, executions, audit-log<br/>S3 · outputs"]
+        STATE["ZOA state<br/><br/>DynamoDB · sessions, executions, audit-log, break-glass<br/>S3 · outputs"]
         subgraph rc_vpc["Target RC VPC"]
             BOUNDARY_RC["ZOA boundary<br/>ECS Fargate + ECS Exec"]
             EB_RC["EventBridge Scheduler"]
@@ -95,8 +95,8 @@ graph TD
     L -.->|"ECS Exec (session-manager-plugin)"| BOUNDARY_RC
     L -.->|"ECS Exec"| BOUNDARY_MC
 
-    BOUNDARY_RC -->|"zoa run (SigV4)"| API_RC
-    BOUNDARY_MC -->|"zoa run (SigV4)"| API_MC
+    BOUNDARY_RC -->|"zoa run / break-glass (SigV4)"| API_RC
+    BOUNDARY_MC -->|"zoa run / break-glass (SigV4)"| API_MC
 
     EB_RC -->|"1m rec / 5m GC / 5m reaper"| WORKER_RC
     EB_MC -->|"1m rec / 5m GC / 5m reaper"| WORKER_MC
@@ -129,7 +129,7 @@ Access Function URL (RC, no VPC)            API Function URL (VPC-attached)
         │                                              │
         ▼                                              ▼
 Access Lambda                               API Lambda  ◄── Worker (EventBridge / self-invoke)
-sessions · targets · RunTask                zoa run · audit reads · streaming
+sessions · targets · RunTask                zoa run · break-glass · audit reads · streaming
 ```
 
 #### ZOA Access Lambda (session plane)
@@ -152,11 +152,11 @@ Session logging: container stdout → `/ecs/<cluster_id>/zoa-boundary`; ECS Exec
 
 #### Per-VPC API Lambda (TA plane — interactive)
 
-From the boundary shell only, `zoa run` and read-only audit APIs call the local **API** Function URL (`ZOA_API_URL`, IAM auth). The ECS task role provides SigV4 identity. The API records caller ARN on every request and resolves the human operator via the **identity bridge** (task id → DynamoDB session).
+From the boundary shell only, `zoa run`, **break-glass** (`request` / `activate` / cred lifecycle), and read-only audit APIs call the local **API** Function URL (`ZOA_API_URL`, IAM auth). The ECS task role provides SigV4 identity. The API records caller ARN on every request and resolves the human operator via the **identity bridge** (task id → DynamoDB session).
 
 #### Worker Lambda (TA plane — background)
 
-The **Worker** shares the VPC execution role but has **no Function URL** and no laptop callers. EventBridge triggers reconciler (async Job polling, dispatch timeouts, resource GC), GC, and boundary reaper. On MC VPCs it reaches RC DynamoDB/S3 via **`zoa-data-access`** (same role assumption as the API execution role).
+The **Worker** shares the VPC execution role but has **no Function URL** and no laptop callers. EventBridge triggers reconciler (TA dispatch/poll/timeout/GC **and** break-glass grant expiry + kube RBAC hygiene), catch-up GC, and boundary session reaper. On MC VPCs it reaches RC DynamoDB/S3 via **`zoa-data-access`** (same role assumption as the API execution role).
 
 #### Trust separation
 
@@ -185,11 +185,12 @@ Each cluster's ZOA is fully independent — Lambdas, boundary ECS, and EventBrid
 
 ### Worker reconciler (scheduled)
 
-The **Worker** runs on three EventBridge schedules (reconciler 1m, GC 5m, boundary reaper 5m). The 1m **reconciler** tick is the async TA control loop:
+The **Worker** runs on three EventBridge schedules (reconciler 1m, GC 5m, boundary reaper 5m). Each tick runs **TA**, then **break-glass**, then (on the reaper route only) **sessions** — distinct `pillar` labels in logs (`ta`, `breakglass`, `sessions`).
 
 - **Sync TAs** run entirely in the **API** Lambda during `zoa run` — the Worker is not on that path.
 - **Async TAs**: the API creates the execution record and dispatches the K8s Job; the reconciler polls Job status, applies timeouts, and drives GC of per-execution RBAC and artifacts.
-- The codebase also supports self-invoke fan-out for `status=approved` executions (reserved for a future approval workflow; product TAs today auto-dispatch and approval APIs are not enabled).
+- **Break-glass**: interactive request/activate/credentials run on the **API**; the Worker expires grants, removes `zoa-bg-<id>` kube RBAC after expiry, and orphan-GCs stale SA objects (same reconciler/GC cadence as TA).
+- Self-invoke fan-out for `status=approved` **TA** executions is implemented for a future peer-approval workflow; v1 TAs auto-dispatch. Break-glass v1 profiles use API auto-approve; laptop `zoa approve` for BG is wired on Access for future policy.
 
 Reconciler, GC, reaper, and any self-invokes share the Worker function's concurrency pool; when the pool is busy, Lambda queues additional invocations until capacity is available.
 
@@ -230,6 +231,7 @@ terraform/modules/zoa-access/   → Session control plane (RC only)
 | DynamoDB (executions)        | PK=`executionId`. GSIs: `target-status-index`, `date-bucket-index`. TTL 365d (`DYNAMODB_TTL_DAYS`). On-demand billing, PITR (non-ephemeral), deletion protection (non-ephemeral).                                                                                                                     |
 | DynamoDB (audit)             | PK=`accountId`, SK=`timestamp`. GSI: `date-bucket-index`. TTL 365d. Every audited API call.                                                                                                                                                                                                           |
 | DynamoDB (boundary sessions) | PK=`sessionId`. GSIs: `task-id-index` (identity bridge), `target-status-index` (reaper, per `targetCluster`), `date-bucket-index` (list/history). TTL 365d. See `terraform/modules/zoa/dynamodb.tf`.                                                                                                  |
+| DynamoDB (break-glass)       | PK=`requestId`. GSIs: `target-status-index`, `date-bucket-index`. TTL 365d. Grant lifecycle (`pending` → `active` → `expired` / `denied`); Worker hygiene for expired kube grants.                                                                                                                    |
 | S3 bucket                    | `{regional_id}-zoa-outputs-{account_id}`. KMS-SSE, versioning, lifecycle (Intelligent-Tiering 30d, expire 365d). Stores output.json and execution.log per execution.                                                                                                                                  |
 | KMS key                      | Symmetric CMK for DynamoDB, S3, boundary + Lambda CloudWatch Logs, ECS Exec session encryption. Key policy: Lambda, `zoa-aws-*`, `zoa-boundary-*`, and CloudWatch Logs service (RC + cross-account MC). See `modules/zoa/kms.tf`.                                                                     |
 | ECR repository               | **Lambda image only** (`zoa-lambda`), mirrored from Quay via skopeo in `modules/zoa`. Runner and boundary images are referenced by tag from the source registry (Konflux/Quay), not stored in this ECR repo. Lifecycle retains last 20 lambda images. Cross-account pull policy scoped to MC OU path. |
@@ -242,17 +244,18 @@ Each target VPC (RC and every MC) gets one instance of this module. It deploys t
 
 **TA plane (Lambdas)**
 
-| Resource                    | Details                                                                                                                                                                                                                                                    |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| API Lambda                  | Function URL (`AWS_IAM` auth type), invoke mode `RESPONSE_STREAM`, x86_64 container from ECR, VPC-attached to private subnets, 512MB memory.                                                                                                               |
-| Worker Lambda               | No Function URL. EventBridge-triggered + self-invoke. Same image, VPC, memory.                                                                                                                                                                             |
-| IAM execution role (shared) | Single role for API + Worker in the VPC. **RC**: direct DynamoDB/S3 in the RC account. **MC**: same APIs after **STS AssumeRole** to `zoa-data-access` in RC. Plus EKS access, TA-scoped `zoa-aws-*` roles, uploader assume, self-invoke, CloudWatch Logs. |
-| IAM: zoa-aws-read           | Per-TA scoped role for AWS read operations (EKS DescribeCluster, EC2 DescribeInstances/VPCs/Subnets/SecurityGroups). Assumed per-execution via STS.                                                                                                        |
-| IAM: zoa-aws-write          | Per-TA scoped role for AWS write operations. Grows incrementally as write TAs are added.                                                                                                                                                                   |
-| SQS DLQ                     | Dead letters for Worker async failures. SSE-SQS, 14-day retention. One per Lambda pair.                                                                                                                                                                    |
-| EKS access entry            | Grants Lambda execution role access to target EKS cluster with a Kubernetes group for RBAC binding.                                                                                                                                                        |
-| Security group              | Egress to EKS API (443) and AWS service endpoints. No inbound rules (Function URL handles ingress).                                                                                                                                                        |
-| EventBridge Scheduler       | Three schedules on Worker: reconciler (1m), GC (5m), boundary reaper (5m). TA self-invoke (when used) is Lambda-to-Lambda, not a fourth schedule. Reaper requires `sessions_table_name` and boundary ECS cluster ARN.                                      |
+| Resource                    | Details                                                                                                                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| API Lambda                  | Function URL (`AWS_IAM` auth type), invoke mode `RESPONSE_STREAM`, x86_64 container from ECR, VPC-attached to private subnets, 512MB memory.                                                                                                                        |
+| Worker Lambda               | No Function URL. EventBridge-triggered + self-invoke. Same image, VPC, memory.                                                                                                                                                                                      |
+| IAM execution role (shared) | Single role for API + Worker in the VPC. **RC**: direct DynamoDB/S3 in the RC account. **MC**: same APIs after **STS AssumeRole** to `zoa-data-access` in RC. Plus EKS access, TA-scoped `zoa-aws-*` roles, uploader assume, self-invoke, CloudWatch Logs.          |
+| IAM: zoa-aws-read           | Per-TA scoped role for AWS read operations (EKS DescribeCluster, EC2 DescribeInstances/VPCs/Subnets/SecurityGroups). Assumed per-execution via STS.                                                                                                                 |
+| IAM: zoa-aws-write          | Per-TA scoped role for AWS write operations. Grows incrementally as write TAs are added.                                                                                                                                                                            |
+| IAM: break-glass (kube/aws) | Standing `zoa-bg-aws-{read,write,elevated}` roles (RC only for write mutations policy). API assumes into these per grant; kube scope provisions ephemeral `zoa-bg-<requestId>` RBAC on activate.                                                                    |
+| SQS DLQ                     | Dead letters for Worker async failures. SSE-SQS, 14-day retention. One per Lambda pair.                                                                                                                                                                             |
+| EKS access entry            | Grants Lambda execution role access to target EKS cluster with a Kubernetes group for RBAC binding.                                                                                                                                                                 |
+| Security group              | Egress to EKS API (443) and AWS service endpoints. No inbound rules (Function URL handles ingress).                                                                                                                                                                 |
+| EventBridge Scheduler       | Three schedules on Worker: reconciler (1m), GC (5m), boundary reaper (5m). TA self-invoke (when used) is Lambda-to-Lambda, not a fourth schedule. Lambdas require `EXECUTION_TABLE`, `SESSIONS_TABLE`, and `BREAKGLASS_TABLE`; reaper uses sessions + boundary ECS. |
 
 **Boundary (ECS Fargate)**
 
@@ -273,11 +276,11 @@ Operator workflows: [ZOA repo — Boundary](https://github.com/openshift-online/
 
 ### `modules/zoa-access/` — Session Control Plane (RC only)
 
-| Resource       | Details                                                                                                                                                                                                                            |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Access Lambda  | Same `zoa-lambda` image, `HANDLER_MODE=access`, **no VPC attachment**. Function URL with `AWS_IAM` auth (no API Gateway). Manages sessions, RunTask, discovery.                                                                    |
-| Invoker role   | Central-account-trusted role; SREs assume via Central Account to call the Function URL.                                                                                                                                            |
-| SSM parameters | **Central** (`aws.central_deployments` + replica): `/zoa/deployments/<deployment_name>` (Function URL + invoker). **RC**: reads/writes target rows under `TARGETS_SSM_PREFIX` (`/zoa/targets/<deployment>/…`) for `session start`. |
+| Resource       | Details                                                                                                                                                                                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Access Lambda  | Same `zoa-lambda` image, `HANDLER_MODE=access`, **no VPC attachment**. Function URL with `AWS_IAM` auth (no API Gateway). Manages sessions, RunTask, discovery; DynamoDB on sessions + break-glass (laptop approve/reject route for future peer policy). |
+| Invoker role   | Central-account-trusted role; SREs assume via Central Account to call the Function URL.                                                                                                                                                                  |
+| SSM parameters | **Central** (`aws.central_deployments` + replica): `/zoa/deployments/<deployment_name>` (Function URL + invoker). **RC**: reads/writes target rows under `TARGETS_SSM_PREFIX` (`/zoa/targets/<deployment>/…`) for `session start`.                       |
 
 The Access Lambda execution role (`aws_iam_role.access_lambda`) is **created** in `zoa-lambda` (RC instance) and **used** by `zoa-access` — this split keeps the trust relationship in the same apply graph as the boundary task definitions it needs to reference.
 
@@ -314,6 +317,7 @@ Operational tuning (Lambda timeouts and reserved concurrency, session max durati
 | Cross-account data     | MC `*-zoa-lambda` roles **STS AssumeRole** to RC `zoa-data-access` for DynamoDB and S3 (trust: MC OU path + `PrincipalArn` `*-zoa-lambda`). RC **S3 bucket policy** separately allows scoped cross-account `PutObject` from MC `*-zoa-job` and `zoa-aws-*` roles under the same OU conditions. |
 | TA-scoped permissions  | Separate `zoa-aws-read` and `zoa-aws-write` IAM roles assumed per execution via STS session policy                                                                                                                                                                                             |
 | K8s RBAC per execution | Per-execution ServiceAccount (`zoa-runner-<exec-id>`) with minimal Role from TA template                                                                                                                                                                                                       |
+| Break-glass RBAC       | Per-grant kube objects `zoa-bg-<requestId>`; Worker GC after expiry. AWS scope uses standing break-glass IAM roles + STS session credentials (no per-request IAM entities).                                                                                                                    |
 | Encryption at rest     | KMS for DynamoDB + S3 + CloudWatch Logs; SQS server-side encryption (SSE-SQS) for DLQ                                                                                                                                                                                                          |
 | Session audit          | ECS Exec transcripts → CloudWatch `.../zoa-boundary/ssm-sessions` (KMS). Container stdout → `/ecs/<cluster>/zoa-boundary`.                                                                                                                                                                     |
 | Session enforcement    | Worker reaper: deadline, stale `creating`, then idle. Deadlines set at session start, not modifiable from inside the container. Detail: [session reaper](https://github.com/openshift-online/rosa-seaplane-zoa/blob/main/docs/boundary/session-reaper.md).                                     |
