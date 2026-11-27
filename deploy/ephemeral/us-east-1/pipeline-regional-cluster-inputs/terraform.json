@@ -36,7 +36,7 @@
   "seaplane_db_skip_final_snapshot": true,
   "seaplane_db_performance_insights_enabled": false,
   "seaplane_db_monitoring_interval": 0,
-  "zoa_lambda_image_tag": "4409936",
+  "zoa_lambda_image_tag": "f06c205",
   "zoa_runner_image_tag": "4409936",
   "zoa_lambda_source_image": "quay.io/rrp-dev-ci/zoa-lambda",
   "zoa_runner_source_image": "quay.io/rrp-dev-ci/zoa-runner",

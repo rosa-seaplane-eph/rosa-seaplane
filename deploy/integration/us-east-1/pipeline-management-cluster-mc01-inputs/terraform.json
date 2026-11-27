@@ -10,7 +10,7 @@
   "management_id": "mc01",
   "regional_aws_account_id": "ssm:///infra/us-east-1/rc/account_id",
   "image_registry_account_id": "ssm:///infra/image-registry/account_id",
-  "zoa_lambda_image_tag": "4409936",
+  "zoa_lambda_image_tag": "f06c205",
   "zoa_runner_image_tag": "4409936",
   "zoa_runner_source_image": "quay.io/rrp-dev-ci/zoa-runner",
   "zoa_boundary_image_tag": "4409936",
