@@ -291,9 +291,36 @@ resource "aws_dynamodb_table" "boundary_sessions" {
 # =============================================================================
 # DynamoDB Table for ZOA Break-Glass
 # =============================================================================
-# Stores break-glass request/grant lifecycle (pending_approval → approved → expired).
-# PK: requestId. GSIs mirror executions: target-status-index (worker expiry),
-# date-bucket-index (operator list/history).
+# Stores break-glass request/grant lifecycle (pending → active → expired | denied).
+# PK: requestId (UUID). `approval` (pending|approved|rejected) is workflow metadata; worker
+# expiry uses lifecycle `status` only (see rosa-seaplane-zoa docs/approval-workflow.md).
+# TTL: attribute ttl, set from DYNAMODB_TTL_DAYS on write (default 365; same as executions)
+#
+# Operation → Index mapping:
+#
+#   | Operation (code path)                              | Index               | Frequency          |
+#   |----------------------------------------------------|---------------------|--------------------|
+#   | Worker: breakglassExpireGrants (pending, active)   | target-status-index | EventBridge 1m/VPC |
+#   | Worker: breakglassGarbageCollect (expired)         | target-status-index | EventBridge 1m/5m  |
+#   | API: GET break-glass list / history / requests     | date-bucket-index   | Human-driven       |
+#   | Access: laptop approve flow Get (by id)            | Table PK            | Human-driven       |
+#   | Get by request UUID: Get                           | Table PK (requestId)| Activate/describe  |
+#
+# GSI Architecture (2 indexes — same names as executions; no task-id-index):
+#
+#   target-status-index (PK=targetCluster, SK=targetStatusKey)
+#     Worker break-glass hygiene (pkg/scheduler/breakglass_gc.go). Scoped to TARGET_CLUSTER.
+#     Sort key format "{status}#{timestamp}" (RFC3339Nano suffix):
+#       - pending#requestExpiresAt
+#       - active#grantExpiresAt
+#       - expired|denied|…#createdAt
+#     Reconciler queries pending+active for expiry; expired for kube CleanupBreakglass + MarkCleaned.
+#     Orphan kube GC lists SAs in-cluster (not a Dynamo scan).
+#
+#   date-bucket-index (PK=dateBucket, SK=createdAt)
+#     Human-driven path. API ListAll / ListByOperator for zoa breakglass history and requests —
+#     same day-bucket iteration as executions/sessions. FilterExpression for operator, target,
+#     profile, status, approval. CLI --since bounds the window.
 
 resource "aws_dynamodb_table" "breakglass" {
   name                        = local.breakglass_table_name
